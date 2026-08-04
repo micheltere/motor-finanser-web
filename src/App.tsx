@@ -94,25 +94,35 @@ function App() {
         const colunaMapeada = mapeamento[varName];
         if (!colunaMapeada) return '';
 
-        const valorOriginal = linha[colunaMapeada];
+        let valorBruto = String(linha[colunaMapeada] || '').trim();
 
-        // 🛡️ NOVO: Se o Excel leu como uma "Data Real", nós extraímos apenas DD/MM/AAAA
-        if (valorOriginal instanceof Date) {
-          const dia = String(valorOriginal.getUTCDate()).padStart(2, '0');
-          const mes = String(valorOriginal.getUTCMonth() + 1).padStart(2, '0');
-          const ano = valorOriginal.getUTCFullYear();
-          return `${dia}/${mes}/${ano}`;
+        // 🛡️ TRATAMENTO CIRÚRGICO DE DATA BRUTA (DD/MM/AAAA)
+        // Se a string contém barras (ex: "16/07/2026"), nós ignoramos qualquer conversão 
+        // de data do JS e pegamos as fatias exatas da string do CSV.
+        if (valorBruto.includes('/')) {
+          const partes = valorBruto.split('/');
+          if (partes.length === 3) {
+            let [p1, p2, p3] = partes;
+            
+            // Se o formato veio como MM/DD/YYYY por engano do parser, corrigimos na marra,
+            // mas pelo seu CSV o p1 é o dia (16) e p2 é o mês (07). 
+            // Vamos garantir que fiquem travados na ordem exata: Dia / Mês / Ano
+            let dia = p1.padStart(2, '0');
+            let mes = p2.padStart(2, '0');
+            let ano = p3;
+            if (ano.length === 2) ano = `20${ano}`;
+
+            return `${dia}/${mes}/${ano}`;
+          }
         }
 
-        // Se veio como texto (ex: "7/5/26"), aplicamos o corretor antigo
-        let valorBruto = String(valorOriginal || '').trim();
-        const regexData = /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/;
-        const matchData = valorBruto.match(regexData);
-        
-        if (matchData) {
-          let [ , p1, p2, ano ] = matchData;
-          if (ano.length === 2) ano = `20${ano}`;
-          valorBruto = `${p2.padStart(2, '0')}/${p1.padStart(2, '0')}/${ano}`;
+        // Se por acaso vier como objeto Date do JS:
+        if (linha[colunaMapeada] instanceof Date) {
+          const d = linha[colunaMapeada] as Date;
+          const dia = String(d.getUTCDate()).padStart(2, '0');
+          const mes = String(d.getUTCMonth() + 1).padStart(2, '0');
+          const ano = d.getUTCFullYear();
+          return `${dia}/${mes}/${ano}`;
         }
 
         return valorBruto;
