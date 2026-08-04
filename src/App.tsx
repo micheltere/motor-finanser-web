@@ -51,7 +51,7 @@ function App() {
     buscarTemplates();
   }, []);
 
-  const lidarComArquivo = (evento: ChangeEvent<HTMLInputElement>) => {
+const lidarComArquivo = (evento: ChangeEvent<HTMLInputElement>) => {
     const arquivo = evento.target.files?.[0];
     if (!arquivo) return;
 
@@ -63,13 +63,29 @@ function App() {
       const workbook = xlsx.read(arrayBuffer, { type: 'array' });
       const aba = workbook.Sheets[workbook.SheetNames[0]];
       
-      // CORREÇÃO DA DATA: raw falso para puxar as máscaras do Excel
-      const dadosJson = xlsx.utils.sheet_to_json(aba, { raw: false, dateNF: 'dd/mm/yyyy' });
+      // 1. Lemos forçando a biblioteca a identificar o que é Data (cellDates: true)
+      const dadosBrutos = xlsx.utils.sheet_to_json(aba, { cellDates: true });
       
-      if (dadosJson.length > 0) {
-        setColunasExcel(Object.keys(dadosJson[0] as object));
-        setDadosPlanilha(dadosJson);
-        setStatusDisparo(`✅ Planilha lida! ${dadosJson.length} registros.`);
+      // 2. Varremos a planilha e forçamos o padrão Brasileiro (DD/MM/AAAA)
+      const dadosFormatados = dadosBrutos.map((linha: any) => {
+        const novaLinha = { ...linha };
+        for (const coluna in novaLinha) {
+          if (novaLinha[coluna] instanceof Date) {
+            const data = novaLinha[coluna];
+            // Usamos UTC para o fuso horário do navegador não voltar 1 dia acidentalmente
+            const dia = String(data.getUTCDate()).padStart(2, '0');
+            const mes = String(data.getUTCMonth() + 1).padStart(2, '0');
+            const ano = data.getUTCFullYear();
+            novaLinha[coluna] = `${dia}/${mes}/${ano}`;
+          }
+        }
+        return novaLinha;
+      });
+      
+      if (dadosFormatados.length > 0) {
+        setColunasExcel(Object.keys(dadosFormatados[0] as object));
+        setDadosPlanilha(dadosFormatados);
+        setStatusDisparo(`✅ Planilha lida! ${dadosFormatados.length} registros.`);
       } else {
         setStatusDisparo('❌ Planilha vazia.');
       }
