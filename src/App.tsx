@@ -85,15 +85,29 @@ function App() {
     const pacoteMensagens = dadosPlanilha.map((linha, index) => {
       const variaveisDinamicas = templateSelecionado.variaveis.map((varName: string) => {
         const colunaMapeada = mapeamento[varName];
-        let valorBruto = colunaMapeada ? String(linha[colunaMapeada] || '').trim() : '';
+        if (!colunaMapeada) return '';
 
+        const valorOriginal = linha[colunaMapeada];
+
+        // 🛡️ NOVO: Se o Excel leu como uma "Data Real", nós extraímos apenas DD/MM/AAAA
+        if (valorOriginal instanceof Date) {
+          const dia = String(valorOriginal.getUTCDate()).padStart(2, '0');
+          const mes = String(valorOriginal.getUTCMonth() + 1).padStart(2, '0');
+          const ano = valorOriginal.getUTCFullYear();
+          return `${dia}/${mes}/${ano}`;
+        }
+
+        // Se veio como texto (ex: "7/5/26"), aplicamos o corretor antigo
+        let valorBruto = String(valorOriginal || '').trim();
         const regexData = /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/;
         const matchData = valorBruto.match(regexData);
+        
         if (matchData) {
           let [ , p1, p2, ano ] = matchData;
           if (ano.length === 2) ano = `20${ano}`;
           valorBruto = `${p2.padStart(2, '0')}/${p1.padStart(2, '0')}/${ano}`;
         }
+
         return valorBruto;
       });
 
@@ -112,6 +126,11 @@ function App() {
       });
 
       if (resposta.ok) setStatusDisparo(`🚀 SUCESSO! ${pacoteMensagens.length} mensagens disparadas!`);
+      
+        // ✨ ATUALIZA A TELA NA HORA: Puxa o histórico logo após o motor gravar no banco
+        const { data } = await supabase.from('mensagens').select('*').order('criado_em', { ascending: false });
+        if (data) setConversas(data);
+
       else setStatusDisparo('❌ Erro no envio.');
     } catch (erro) {
       setStatusDisparo('❌ Motor offline.');
