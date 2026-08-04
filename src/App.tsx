@@ -25,20 +25,9 @@ function App() {
 
   // EFEITO: Busca Mensagens e Templates
   useEffect(() => {
-const buscarMensagens = async () => {
-      console.log("Iniciando busca no Supabase...");
-      
-      const { data, error } = await supabase
-        .from('mensagens')
-        .select('*')
-        .order('created_at', { ascending: false });
-      
-      if (error) {
-        console.error("🚨 ERRO SUPABASE:", error.message, error.details);
-      } else {
-        console.log("✅ DADOS RECEBIDOS DO BANCO:", data);
-        setConversas(data || []);
-      }
+    const buscarMensagens = async () => {
+      const { data, error } = await supabase.from('mensagens').select('*').order('criado_em', { ascending: false });
+      if (!error) setConversas(data || []);
     };
 
     const buscarTemplates = async () => {
@@ -175,7 +164,7 @@ const buscarMensagens = async () => {
               >
                 <div className="flex justify-between items-baseline mb-1">
                   <h3 className="font-semibold text-gray-800">{msg.telefone_cliente || 'Desconhecido'}</h3>
-                  <span className="text-xs text-gray-400">{new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                  <span className="text-xs text-gray-400">{new Date(msg.criado_em).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                 </div>
                 <p className="text-sm text-gray-500 truncate">{msg.texto_mensagem}</p>
               </div>
@@ -271,7 +260,7 @@ const buscarMensagens = async () => {
                     <div className="p-4 rounded-lg shadow-md max-w-md bg-white rounded-tl-none relative border border-gray-100">
                       <p className="text-gray-800 text-[15px]">{mensagemSelecionada.texto_mensagem}</p>
                       <span className="text-[10px] text-gray-400 block text-right mt-2">
-                        {new Date(mensagemSelecionada.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {new Date(mensagemSelecionada.criado_em).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </span>
                     </div>
                   </div>
