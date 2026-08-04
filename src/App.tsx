@@ -25,9 +25,20 @@ function App() {
 
   // EFEITO: Busca Mensagens e Templates
   useEffect(() => {
-    const buscarMensagens = async () => {
-      const { data, error } = await supabase.from('mensagens').select('*').order('created_at', { ascending: false });
-      if (!error) setConversas(data || []);
+const buscarMensagens = async () => {
+      console.log("Iniciando busca no Supabase...");
+      
+      const { data, error } = await supabase
+        .from('mensagens')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (error) {
+        console.error("🚨 ERRO SUPABASE:", error.message, error.details);
+      } else {
+        console.log("✅ DADOS RECEBIDOS DO BANCO:", data);
+        setConversas(data || []);
+      }
     };
 
     const buscarTemplates = async () => {
