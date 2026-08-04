@@ -19,6 +19,9 @@ function App() {
   const [mapeamento, setMapeamento] = useState<Record<string, string>>({});
   const [statusDisparo, setStatusDisparo] = useState('');
 
+  const [mensagemDigitada, setMensagemDigitada] = useState('');
+  const [enviandoMensagem, setEnviandoMensagem] = useState(false);
+
   // EFEITO: Busca Mensagens
   useEffect(() => {
     const buscarMensagens = async () => {
@@ -44,6 +47,35 @@ function App() {
     buscarMensagens();
     buscarTemplates();
 
+
+const enviarMensagemManual = async (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && mensagemDigitada.trim() !== '' && telefoneAtivo) {
+      setEnviandoMensagem(true);
+      try {
+        const urlMotor = 'https://motor-finanser-api.onrender.com/api/send-message';
+        const resposta = await fetch(urlMotor, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: telefoneAtivo, text: mensagemDigitada })
+        });
+
+        if (resposta.ok) {
+          setMensagemDigitada(''); // Limpa o campo
+          // Atualiza o chat puxando do banco
+          const { data } = await supabase.from('mensagens').select('*').order('criado_em', { ascending: false });
+          if (data) setConversas(data);
+        } else {
+          alert('❌ A Meta bloqueou o envio. O cliente interagiu nas últimas 24h?');
+        }
+      } catch (err) {
+        alert('❌ Erro de conexão com o Motor.');
+      } finally {
+        setEnviandoMensagem(false);
+      }
+    }
+  };
+
+    
     // Opcional: Atualiza o chat a cada 5 segundos para ver o status mudando em tempo real
     const intervalo = setInterval(buscarMensagens, 5000);
     return () => clearInterval(intervalo);
@@ -260,7 +292,17 @@ function App() {
                 </div>
 
                 <div className="p-4 bg-gray-100 border-t sticky bottom-0">
-                  <input disabled type="text" placeholder="Painel de leitura. Em breve respostas manuais..." className="w-full py-3 px-4 rounded-lg bg-white border cursor-not-allowed" />
+                  <div className="p-4 bg-gray-100 border-t sticky bottom-0">
+  <input 
+    type="text" 
+    placeholder={enviandoMensagem ? "Enviando..." : "Digite uma mensagem e aperte Enter..."} 
+    className="w-full py-3 px-4 rounded-lg bg-white border border-gray-300 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition-all"
+    value={mensagemDigitada}
+    onChange={(e) => setMensagemDigitada(e.target.value)}
+    onKeyDown={enviarMensagemManual}
+    disabled={enviandoMensagem}
+  />
+</div>
                 </div>
               </>
             ) : (
