@@ -14,22 +14,22 @@ function App() {
   const [colunasExcel, setColunasExcel] = useState<string[]>([]);
   const [dadosPlanilha, setDadosPlanilha] = useState<any[]>([]);
   
-  // Estado que começa carregando e vai receber os dados da Meta
   const [templatesMeta, setTemplatesMeta] = useState<any[]>([{ id: 'selecione', nome: '🔄 Carregando templates da Meta...', variaveis: [] }]);
   const [templateSelecionado, setTemplateSelecionado] = useState<any>(null);
   
+  // NOVO: Estado da coluna de telefone
+  const [colunaTelefoneSelecionada, setColunaTelefoneSelecionada] = useState<string>('');
+
   const [mapeamento, setMapeamento] = useState<Record<string, string>>({});
   const [statusDisparo, setStatusDisparo] = useState('');
 
-  // EFEITO: Busca Mensagens do Supabase E Templates da Meta
+  // EFEITO: Busca Mensagens e Templates
   useEffect(() => {
-    // 1. Busca Histórico (Supabase)
     const buscarMensagens = async () => {
       const { data, error } = await supabase.from('mensagens').select('*').order('created_at', { ascending: false });
       if (!error) setConversas(data || []);
     };
 
-    // 2. Busca Templates Dinâmicos (Via Motor)
     const buscarTemplates = async () => {
       try {
         const urlMotor = 'https://motor-finanser-api.onrender.com/api/templates';
@@ -62,7 +62,9 @@ function App() {
       const arrayBuffer = e.target?.result;
       const workbook = xlsx.read(arrayBuffer, { type: 'array' });
       const aba = workbook.Sheets[workbook.SheetNames[0]];
-      const dadosJson = xlsx.utils.sheet_to_json(aba);
+      
+      // CORREÇÃO DA DATA: raw falso para puxar as máscaras do Excel
+      const dadosJson = xlsx.utils.sheet_to_json(aba, { raw: false, dateNF: 'dd/mm/yyyy' });
       
       if (dadosJson.length > 0) {
         setColunasExcel(Object.keys(dadosJson[0] as object));
@@ -85,6 +87,12 @@ function App() {
       return;
     }
 
+    // TRAVA: Obriga o usuário a escolher a coluna do WhatsApp
+    if (!colunaTelefoneSelecionada) {
+      alert('Por favor, selecione qual é a coluna que contém o número de WhatsApp!');
+      return;
+    }
+
     setStatusDisparo('⏳ Empacotando dados e enviando para a Nuvem...');
 
     const pacoteMensagens = dadosPlanilha.map((linha, index) => {
@@ -93,8 +101,8 @@ function App() {
         return colunaMapeada ? String(linha[colunaMapeada] || '') : '';
       });
 
-      const colunaTelefone = colunasExcel.find(c => c.toLowerCase().includes('celular') || c.toLowerCase().includes('telefone'));
-      let telefoneBruto = colunaTelefone ? String(linha[colunaTelefone]) : '';
+      // PEGA DA COLUNA ESCOLHIDA NA TELA:
+      let telefoneBruto = String(linha[colunaTelefoneSelecionada] || '');
       let telefoneLimpo = telefoneBruto.replace(/\D/g, '');
       if (telefoneLimpo && !telefoneLimpo.startsWith('55')) telefoneLimpo = `55${telefoneLimpo}`;
 
@@ -144,19 +152,24 @@ function App() {
 
         <div className="flex-1 overflow-y-auto">
           <div className="px-4 py-2 bg-gray-100 text-xs font-bold text-gray-500 uppercase sticky top-0">Caixa de Entrada</div>
-          {conversas.map((msg, index) => (
-            <div key={index} onClick={() => { setMensagemSelecionada(msg); setAbaAtiva('chat'); }}
-              className={`p-4 border-b border-gray-100 cursor-pointer hover:bg-gray-50 ${
-                mensagemSelecionada?.id === msg.id && abaAtiva === 'chat' ? 'bg-blue-50 border-l-4 border-l-blue-500' : 'border-l-4 border-l-transparent'
-              }`}
-            >
-              <div className="flex justify-between items-baseline mb-1">
-                <h3 className="font-semibold text-gray-800">{msg.telefone_cliente || 'Desconhecido'}</h3>
-                <span className="text-xs text-gray-400">{new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+          
+          {conversas.length === 0 ? (
+            <div className="p-6 text-center text-sm text-gray-400">Nenhuma mensagem recebida ainda.</div>
+          ) : (
+            conversas.map((msg, index) => (
+              <div key={index} onClick={() => { setMensagemSelecionada(msg); setAbaAtiva('chat'); }}
+                className={`p-4 border-b border-gray-100 cursor-pointer hover:bg-gray-50 ${
+                  mensagemSelecionada?.id === msg.id && abaAtiva === 'chat' ? 'bg-blue-50 border-l-4 border-l-blue-500' : 'border-l-4 border-l-transparent'
+                }`}
+              >
+                <div className="flex justify-between items-baseline mb-1">
+                  <h3 className="font-semibold text-gray-800">{msg.telefone_cliente || 'Desconhecido'}</h3>
+                  <span className="text-xs text-gray-400">{new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                </div>
+                <p className="text-sm text-gray-500 truncate">{msg.texto_mensagem}</p>
               </div>
-              <p className="text-sm text-gray-500 truncate">{msg.texto_mensagem}</p>
-            </div>
-          ))}
+            ))
+          )}
         </div>
       </div>
 
@@ -178,8 +191,22 @@ function App() {
 
             {colunasExcel.length > 0 && (
               <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mb-6 animate-fade-in-up">
-                <h2 className="text-md font-semibold mb-4 text-gray-700">2. Mapeamento do Template (Sincronizado c/ Meta)</h2>
-                
+                <h2 className="text-md font-semibold mb-4 text-gray-700">2. Mapeamento da Campanha</h2>
+
+                {/* 1. SELETOR DO TELEFONE */}
+                <div className="bg-green-50 p-4 rounded-lg border border-green-200 mb-6">
+                  <h3 className="text-sm font-bold text-green-800 mb-2">Coluna de WhatsApp (Destinatário)</h3>
+                  <select 
+                    className="w-full border-gray-300 rounded p-2 text-sm border bg-white"
+                    onChange={(e) => setColunaTelefoneSelecionada(e.target.value)}
+                  >
+                    <option value="">-- Qual coluna tem os números de celular? --</option>
+                    {colunasExcel.map(col => <option key={col} value={col}>{col}</option>)}
+                  </select>
+                </div>
+
+                {/* 2. SELETOR DO TEMPLATE (Restaurado) */}
+                <h3 className="text-sm font-bold text-gray-700 mb-2">Template Aprovado (Meta)</h3>
                 <select 
                   className="w-full border-gray-300 rounded-md shadow-sm p-3 border mb-6 bg-gray-50 focus:bg-white font-medium"
                   onChange={(e) => {
@@ -190,6 +217,7 @@ function App() {
                   {templatesMeta.map(tpl => <option key={tpl.id} value={tpl.id}>{tpl.nome}</option>)}
                 </select>
 
+                {/* 3. MAPEAMENTO DAS VARIÁVEIS */}
                 {templateSelecionado && templateSelecionado.variaveis.length > 0 && (
                   <div className="bg-orange-50 p-5 rounded-lg border border-orange-200">
                     <h3 className="text-sm font-bold text-orange-800 mb-4">Ligue as Colunas da Planilha ➜ Variáveis da Meta</h3>
@@ -216,7 +244,42 @@ function App() {
           </div>
         ) : (
           <div className="flex-1 flex flex-col h-full bg-[url('https://i.pinimg.com/originals/8c/98/99/8c98994518b575bfd8c949e91d20548b.jpg')] bg-cover bg-center">
-             {/* Conteúdo do chat mantido igual */}
+            
+            {/* TELA DE CHAT COMPLETA RESTAURADA */}
+            {mensagemSelecionada ? (
+              <>
+                <div className="h-16 bg-white flex items-center px-6 border-b border-gray-200 shadow-sm">
+                  <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold mr-4">
+                    📱
+                  </div>
+                  <h2 className="font-bold text-gray-800 text-lg">{mensagemSelecionada.telefone_cliente}</h2>
+                </div>
+                
+                <div className="flex-1 p-6 overflow-y-auto flex flex-col justify-end">
+                  <div className="flex mb-4 justify-start">
+                    <div className="p-4 rounded-lg shadow-md max-w-md bg-white rounded-tl-none relative border border-gray-100">
+                      <p className="text-gray-800 text-[15px]">{mensagemSelecionada.texto_mensagem}</p>
+                      <span className="text-[10px] text-gray-400 block text-right mt-2">
+                        {new Date(mensagemSelecionada.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-gray-100 border-t border-gray-200">
+                  <input
+                    type="text" placeholder="Painel de monitoramento. Respostas pela Meta em breve..." disabled
+                    className="w-full py-3 px-4 rounded-lg bg-white border border-gray-200 text-sm text-gray-400 cursor-not-allowed shadow-inner"
+                  />
+                </div>
+              </>
+            ) : (
+              <div className="flex-1 flex items-center justify-center">
+                <div className="bg-white/90 p-6 rounded-xl shadow-sm text-center">
+                  <p className="text-gray-500 font-medium">Selecione uma conversa na barra lateral</p>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
