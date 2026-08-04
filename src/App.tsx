@@ -48,32 +48,7 @@ function App() {
     buscarTemplates();
 
 
-const enviarMensagemManual = async (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && mensagemDigitada.trim() !== '' && telefoneAtivo) {
-      setEnviandoMensagem(true);
-      try {
-        const urlMotor = 'https://motor-finanser-api.onrender.com/api/send-message';
-        const resposta = await fetch(urlMotor, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone: telefoneAtivo, text: mensagemDigitada })
-        });
 
-        if (resposta.ok) {
-          setMensagemDigitada(''); // Limpa o campo
-          // Atualiza o chat puxando do banco
-          const { data } = await supabase.from('mensagens').select('*').order('criado_em', { ascending: false });
-          if (data) setConversas(data);
-        } else {
-          alert('❌ A Meta bloqueou o envio. O cliente interagiu nas últimas 24h?');
-        }
-      } catch (err) {
-        alert('❌ Erro de conexão com o Motor.');
-      } finally {
-        setEnviandoMensagem(false);
-      }
-    }
-  };
 
     
     // Opcional: Atualiza o chat a cada 5 segundos para ver o status mudando em tempo real
@@ -168,6 +143,35 @@ const enviarMensagemManual = async (e: React.KeyboardEvent<HTMLInputElement>) =>
       setStatusDisparo('❌ Motor offline.');
     }
   };
+
+  const enviarMensagemManual = async (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && mensagemDigitada.trim() !== '' && telefoneAtivo) {
+      setEnviandoMensagem(true);
+      try {
+        const urlMotor = 'https://motor-finanser-api.onrender.com/api/send-message';
+        const resposta = await fetch(urlMotor, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: telefoneAtivo, text: mensagemDigitada })
+        });
+
+        if (resposta.ok) {
+          setMensagemDigitada(''); // Limpa o campo
+          // Atualiza o chat puxando do banco
+          const { data } = await supabase.from('mensagens').select('*').order('criado_em', { ascending: false });
+          if (data) setConversas(data);
+        } else {
+          alert('❌ A Meta bloqueou o envio. O cliente interagiu nas últimas 24h?');
+        }
+      } catch (err) {
+        alert('❌ Erro de conexão com o Motor.');
+      } finally {
+        setEnviandoMensagem(false);
+      }
+    }
+  };
+
+
 
   // 1. Lógica da Barra Lateral (Agrupar um contato por número)
   const contatosUnicos = conversas.reduce((acc, msg) => {
