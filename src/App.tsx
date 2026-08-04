@@ -66,7 +66,7 @@ function App() {
       const arrayBuffer = e.target?.result;
       const workbook = xlsx.read(arrayBuffer, { type: 'array', cellDates: true });
       const aba = workbook.Sheets[workbook.SheetNames[0]];
-      const dadosBrutos = xlsx.utils.sheet_to_json(aba);
+      const dadosBrutos = xlsx.utils.sheet_to_json(aba, { raw: false, dateNF: 'yyyy-mm-dd' });
       
       const dadosFormatados = dadosBrutos.map((linha: any) => linha);
       
