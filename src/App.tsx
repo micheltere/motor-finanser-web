@@ -131,7 +131,6 @@ const lidarComArquivo = (evento: ChangeEvent<HTMLInputElement>) => {
       return;
     }
 
-    // TRAVA: Obriga o usuário a escolher a coluna do WhatsApp
     if (!colunaTelefoneSelecionada) {
       alert('Por favor, selecione qual é a coluna que contém o número de WhatsApp!');
       return;
@@ -142,10 +141,22 @@ const lidarComArquivo = (evento: ChangeEvent<HTMLInputElement>) => {
     const pacoteMensagens = dadosPlanilha.map((linha, index) => {
       const variaveisDinamicas = templateSelecionado.variaveis.map((varName: string) => {
         const colunaMapeada = mapeamento[varName];
-        return colunaMapeada ? String(linha[colunaMapeada] || '') : '';
+        let valorBruto = colunaMapeada ? String(linha[colunaMapeada] || '').trim() : '';
+
+        // 🛡️ CORRETOR AUTOMÁTICO DE DATA (DD/MM/AAAA)
+        // Identifica se o texto parece uma data (ex: 7/5/26, 05-07-2026, etc)
+        const regexData = /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/;
+        const matchData = valorBruto.match(regexData);
+
+        if (matchData) {
+          let [ , dia, mes, ano ] = matchData;
+          if (ano.length === 2) ano = `20${ano}`;
+          valorBruto = `${dia.padStart(2, '0')}/${mes.padStart(2, '0')}/${ano}`;
+        }
+
+        return valorBruto;
       });
 
-      // PEGA DA COLUNA ESCOLHIDA NA TELA:
       let telefoneBruto = String(linha[colunaTelefoneSelecionada] || '');
       let telefoneLimpo = telefoneBruto.replace(/\D/g, '');
       if (telefoneLimpo && !telefoneLimpo.startsWith('55')) telefoneLimpo = `55${telefoneLimpo}`;
