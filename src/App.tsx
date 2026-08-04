@@ -60,10 +60,10 @@ const lidarComArquivo = (evento: ChangeEvent<HTMLInputElement>) => {
 
     leitor.onload = (e) => {
       const arrayBuffer = e.target?.result;
-      const workbook = xlsx.read(arrayBuffer, { type: 'array' });
+      const workbook = xlsx.read(arrayBuffer, { type: 'array', cellDates: true });
       const aba = workbook.Sheets[workbook.SheetNames[0]];
       
-      const dadosBrutos = xlsx.utils.sheet_to_json(aba, { cellDates: true });
+      const dadosBrutos = xlsx.utils.sheet_to_json(aba);
       
       // Função interna para normalizar qualquer data para DD/MM/AAAA
       const formatarDataInteligente = (valor: any): string => {
