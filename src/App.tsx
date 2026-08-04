@@ -63,20 +63,48 @@ const lidarComArquivo = (evento: ChangeEvent<HTMLInputElement>) => {
       const workbook = xlsx.read(arrayBuffer, { type: 'array' });
       const aba = workbook.Sheets[workbook.SheetNames[0]];
       
-      // 1. Lemos forçando a biblioteca a identificar o que é Data (cellDates: true)
       const dadosBrutos = xlsx.utils.sheet_to_json(aba, { cellDates: true });
       
-      // 2. Varremos a planilha e forçamos o padrão Brasileiro (DD/MM/AAAA)
+      // Função interna para normalizar qualquer data para DD/MM/AAAA
+      const formatarDataInteligente = (valor: any): string => {
+        if (!valor) return '';
+
+        // Se for objeto Date do JS
+        if (valor instanceof Date) {
+          const dia = String(valor.getUTCDate()).padStart(2, '0');
+          const mes = String(valor.getUTCMonth() + 1).padStart(2, '0');
+          const ano = valor.getUTCFullYear();
+          return `${dia}/${mes}/${ano}`;
+        }
+
+        const str = String(valor).trim();
+
+        // Se veio no formato de texto com barras ou hífens (ex: 7/5/26 ou 5/7/2026)
+        if (str.includes('/') || str.includes('-')) {
+          const separador = str.includes('/') ? '/' : '-';
+          const partes = str.split(separador);
+          if (partes.length === 3) {
+            let [p1, p2, p3] = partes;
+            
+            // Se o ano tiver 2 dígitos (ex: 26), converte para 2026
+            if (p3.length === 2) p3 = `20${p3}`;
+            
+            // Retorna formatado com zero à esquerda (DD/MM/AAAA)
+            return `${p1.padStart(2, '0')}/${p2.padStart(2, '0')}/${p3}`;
+          }
+        }
+
+        return str;
+      };
+
+      // Varre a planilha e aplica a formatação em campos de data
       const dadosFormatados = dadosBrutos.map((linha: any) => {
         const novaLinha = { ...linha };
         for (const coluna in novaLinha) {
-          if (novaLinha[coluna] instanceof Date) {
-            const data = novaLinha[coluna];
-            // Usamos UTC para o fuso horário do navegador não voltar 1 dia acidentalmente
-            const dia = String(data.getUTCDate()).padStart(2, '0');
-            const mes = String(data.getUTCMonth() + 1).padStart(2, '0');
-            const ano = data.getUTCFullYear();
-            novaLinha[coluna] = `${dia}/${mes}/${ano}`;
+          const valor = novaLinha[coluna];
+          // Se for uma data ou uma string que pareça data, formata
+          if (valor instanceof Date || (typeof valor === 'string' && (valor.includes('/') || valor.includes('-')))) {
+            novaLinha[coluna] = formatarDataInteligente(valor);
           }
         }
         return novaLinha;
@@ -91,7 +119,7 @@ const lidarComArquivo = (evento: ChangeEvent<HTMLInputElement>) => {
       }
     };
     leitor.readAsArrayBuffer(arquivo);
-  };
+  };  
 
   const atualizarMapeamento = (nomeVariavel: string, colunaSelecionada: string) => {
     setMapeamento(prev => ({ ...prev, [nomeVariavel]: colunaSelecionada }));
