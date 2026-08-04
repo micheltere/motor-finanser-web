@@ -1,4 +1,5 @@
-import { useState, useEffect, ChangeEvent } from 'react';
+import { useState, useEffect } from 'react';
+import type { ChangeEvent } from 'react';
 import * as xlsx from 'xlsx';
 import { supabase } from './supabase';
 
