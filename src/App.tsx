@@ -32,7 +32,7 @@ function App() {
     // 2. Busca Templates Dinâmicos (Via Motor)
     const buscarTemplates = async () => {
       try {
-        const urlMotor = 'https://motor-finanser-api.onrender.com'; // Mude para URL do Render no futuro
+        const urlMotor = 'https://motor-finanser-api.onrender.com/api/templates';
         const res = await fetch(urlMotor);
         if (res.ok) {
           const templates = await res.json();
@@ -107,7 +107,7 @@ function App() {
     }).filter(msg => msg.phone !== '');
 
     try {
-      const urlMotor = 'http://localhost:3000/api/send-bulk'; 
+      const urlMotor = 'https://motor-finanser-api.onrender.com/api/send-bulk'; 
       const resposta = await fetch(urlMotor, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
