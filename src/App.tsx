@@ -151,7 +151,7 @@ const lidarComArquivo = (evento: ChangeEvent<HTMLInputElement>) => {
         if (matchData) {
           let [ , dia, mes, ano ] = matchData;
           if (ano.length === 2) ano = `20${ano}`;
-          valorBruto = `${dia.padStart(2, '0')}/${mes.padStart(2, '0')}/${ano}`;
+          valorBruto = `${mes.padStart(2, '0')}/${dia.padStart(2, '0')}/${ano}`;
         }
 
         return valorBruto;
