@@ -2,13 +2,33 @@ import { useState, useEffect } from 'react';
 import type { ChangeEvent } from 'react';
 import * as xlsx from 'xlsx';
 import { supabase } from './supabase';
+import Login from './Login'; // IMPORT DA NOVA TELA DE LOGIN
 
 function App() {
+  // ==========================================
+  // 1. SISTEMA DE AUTENTICAÇÃO (A BARREIRA)
+  // ==========================================
+  const [autenticado, setAutenticado] = useState<boolean>(() => {
+    // Lê do navegador se o usuário já fez login antes
+    return localStorage.getItem('finanser_auth') === 'true';
+  });
+
+  const fazerLogin = (senhaDigitada: string) => {
+    // Senha de acesso ao sistema (Pode alterar para a que preferir)
+    if (senhaDigitada === 'finanser2026') {
+      localStorage.setItem('finanser_auth', 'true');
+      setAutenticado(true);
+    }
+  };
+
+  // ==========================================
+  // 2. ESTADOS DO SISTEMA (CHAT E DISPAROS)
+  // ==========================================
   const [abaAtiva, setAbaAtiva] = useState<'disparo' | 'chat'>('disparo');
   
   // Chat
   const [conversas, setConversas] = useState<any[]>([]);
-  const [telefoneAtivo, setTelefoneAtivo] = useState<string | null>(null); // NOVO: Controla qual conversa está aberta
+  const [telefoneAtivo, setTelefoneAtivo] = useState<string | null>(null);
 
   // Disparo e Templates
   const [colunasExcel, setColunasExcel] = useState<string[]>([]);
@@ -22,6 +42,16 @@ function App() {
   const [mensagemDigitada, setMensagemDigitada] = useState('');
   const [enviandoMensagem, setEnviandoMensagem] = useState(false);
 
+  // ==========================================
+  // 3. SE NÃO ESTIVER LOGADO, TRAVA NA TELA DE LOGIN
+  // ==========================================
+  if (!autenticado) {
+    return <Login onLogin={fazerLogin} />;
+  }
+
+  // ==========================================
+  // 4. EFEITOS E FUNÇÕES (SÓ RODAM SE LOGADO)
+  // ==========================================
   // EFEITO: Busca Mensagens
   useEffect(() => {
     const buscarMensagens = async () => {
@@ -47,17 +77,12 @@ function App() {
     buscarMensagens();
     buscarTemplates();
 
-
-
-
-    
     // Opcional: Atualiza o chat a cada 5 segundos para ver o status mudando em tempo real
     const intervalo = setInterval(buscarMensagens, 5000);
     return () => clearInterval(intervalo);
   }, []);
 
   const lidarComArquivo = (evento: ChangeEvent<HTMLInputElement>) => {
-    // ... (Sua lógica de leitura de arquivo que já funciona perfeitamente) ...
     const arquivo = evento.target.files?.[0];
     if (!arquivo) return;
     setStatusDisparo('Carregando planilha...');
@@ -91,41 +116,41 @@ function App() {
 
     const pacoteMensagens = dadosPlanilha.map((linha, index) => {
       const variaveisDinamicas = templateSelecionado.variaveis.map((varName: string) => {
-  const colunaMapeada = mapeamento[varName];
-  if (!colunaMapeada) return '';
+        const colunaMapeada = mapeamento[varName];
+        if (!colunaMapeada) return '';
 
-  const dadoBruto = linha[colunaMapeada];
+        const dadoBruto = linha[colunaMapeada];
 
-  // 1. PRIMEIRO: Testamos se é uma Data do JS (Aqui o +1 é obrigatório)
-  if (dadoBruto instanceof Date) {
-    const dia = String(dadoBruto.getUTCDate()).padStart(2, '0');
-    // O +1 conserta a falha do JavaScript que acha que Agosto é o mês 7
-    const mes = String(dadoBruto.getUTCMonth() + 1).padStart(2, '0'); 
-    const ano = dadoBruto.getUTCFullYear();
-    return `${dia}/${mes}/${ano}`;
-  }
+        // 1. PRIMEIRO: Testamos se é uma Data do JS (Aqui o +1 é obrigatório)
+        if (dadoBruto instanceof Date) {
+          const dia = String(dadoBruto.getUTCDate()).padStart(2, '0');
+          // O +1 conserta a falha do JavaScript que acha que Agosto é o mês 7
+          const mes = String(dadoBruto.getUTCMonth() + 1).padStart(2, '0'); 
+          const ano = dadoBruto.getUTCFullYear();
+          return `${dia}/${mes}/${ano}`;
+        }
 
-  // 2. SEGUNDO: Se não for Date, transformamos e tratamos como Texto 
-  let valorTexto = String(dadoBruto || '').trim();
+        // 2. SEGUNDO: Se não for Date, transformamos e tratamos como Texto 
+        let valorTexto = String(dadoBruto || '').trim();
 
-  // Tratamento cirúrgico da string
-  if (valorTexto.includes('/')) {
-    const partes = valorTexto.split('/');
-    if (partes.length === 3) {
-      let [p1, p2, p3] = partes;
-      
-      let dia = p1.padStart(2, '0');
-      // Não precisa de +1, pois o texto "08" continua sendo apenas "08"
-      let mes = p2.padStart(2, '0'); 
-      let ano = p3;
-      
-      if (ano.length === 2) ano = `20${ano}`;
-      return `${dia}/${mes}/${ano}`;
-    }
-  }
+        // Tratamento cirúrgico da string
+        if (valorTexto.includes('/')) {
+          const partes = valorTexto.split('/');
+          if (partes.length === 3) {
+            let [p1, p2, p3] = partes;
+            
+            let dia = p1.padStart(2, '0');
+            // Não precisa de +1, pois o texto "08" continua sendo apenas "08"
+            let mes = p2.padStart(2, '0'); 
+            let ano = p3;
+            
+            if (ano.length === 2) ano = `20${ano}`;
+            return `${dia}/${mes}/${ano}`;
+          }
+        }
 
-  return valorTexto;
-});
+        return valorTexto;
+      });
 
       let telefoneLimpo = String(linha[colunaTelefoneSelecionada] || '').replace(/\D/g, '');
       if (telefoneLimpo && !telefoneLimpo.startsWith('55')) telefoneLimpo = `55${telefoneLimpo}`;
@@ -141,13 +166,15 @@ function App() {
         body: JSON.stringify({ messages: pacoteMensagens })
       });
 
-      if (resposta.ok) setStatusDisparo(`🚀 SUCESSO! ${pacoteMensagens.length} mensagens disparadas!`);
+      if (resposta.ok) {
+        setStatusDisparo(`🚀 SUCESSO! ${pacoteMensagens.length} mensagens disparadas!`);
       
         // ✨ ATUALIZA A TELA NA HORA: Puxa o histórico logo após o motor gravar no banco
         const { data } = await supabase.from('mensagens').select('*').order('criado_em', { ascending: false });
         if (data) setConversas(data);
-
-      else setStatusDisparo('❌ Erro no envio.');
+      } else {
+        setStatusDisparo('❌ Erro no envio.');
+      }
     } catch (erro) {
       setStatusDisparo('❌ Motor offline.');
     }
@@ -180,8 +207,6 @@ function App() {
     }
   };
 
-
-
   // 1. Lógica da Barra Lateral (Agrupar um contato por número)
   const contatosUnicos = conversas.reduce((acc, msg) => {
     if (!acc[msg.telefone_cliente]) acc[msg.telefone_cliente] = msg; // Pega só a mais recente
@@ -194,6 +219,9 @@ function App() {
     .filter(msg => msg.telefone_cliente === telefoneAtivo)
     .sort((a, b) => new Date(a.criado_em).getTime() - new Date(b.criado_em).getTime()); // Ordena da mais antiga para mais nova
 
+  // ==========================================
+  // 5. RENDERIZAÇÃO DA INTERFACE OFICIAL
+  // ==========================================
   return (
     <div className="flex h-screen bg-gray-50 font-sans text-gray-800">
       
@@ -306,16 +334,16 @@ function App() {
 
                 <div className="p-4 bg-gray-100 border-t sticky bottom-0">
                   <div className="p-4 bg-gray-100 border-t sticky bottom-0">
-  <input 
-    type="text" 
-    placeholder={enviandoMensagem ? "Enviando..." : "Digite uma mensagem e aperte Enter..."} 
-    className="w-full py-3 px-4 rounded-lg bg-white border border-gray-300 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition-all"
-    value={mensagemDigitada}
-    onChange={(e) => setMensagemDigitada(e.target.value)}
-    onKeyDown={enviarMensagemManual}
-    disabled={enviandoMensagem}
-  />
-</div>
+                    <input 
+                      type="text" 
+                      placeholder={enviandoMensagem ? "Enviando..." : "Digite uma mensagem e aperte Enter..."} 
+                      className="w-full py-3 px-4 rounded-lg bg-white border border-gray-300 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition-all"
+                      value={mensagemDigitada}
+                      onChange={(e) => setMensagemDigitada(e.target.value)}
+                      onKeyDown={enviarMensagemManual}
+                      disabled={enviandoMensagem}
+                    />
+                  </div>
                 </div>
               </>
             ) : (
