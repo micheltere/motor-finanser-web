@@ -3,7 +3,6 @@ import type { ChangeEvent } from 'react';
 import * as xlsx from 'xlsx';
 import { supabase } from './supabase';
 import Login from './login';
-// ✨ ADICIONADO O ÍCONE ArrowLeft (Seta de voltar para o mobile)
 import { MessageSquare, Send, Lock, ArrowLeft } from 'lucide-react'; 
 
 function App() {
@@ -202,7 +201,7 @@ function App() {
     if (texto.startsWith('[DOCUMENTO|')) return '📄 Documento';
     
     if (texto.startsWith('[Template: ')) {
-      const nomeTemplate = texto.replace('[Template: ', '').replace(']', '').trim();
+      const nomeTemplate = texto.replace('[Template: ', '').replace(/\]$/, '').split(' | ')[0].trim();
       return `📢 Disparo (${nomeTemplate})`;
     }
     
@@ -240,25 +239,21 @@ function App() {
       );
     }
     
-    // 3. ✨ NOVO: Tratamento para TEMPLATES com Variáveis
+    // Tratamento para TEMPLATES com Variáveis
     if (texto.startsWith('[Template: ')) {
-      // Limpa os colchetes e divide o texto. 
-      // Ex de conteudo: "vencimento_proximo_v3 | Michel | 15/08"
       const conteudoStr = texto.replace('[Template: ', '').replace(/\]$/, '').trim();
       const partes = conteudoStr.split(' | ');
       
-      const nomeTemplate = partes[0]; // "vencimento_proximo_v3"
-      const variaveisSalvas = partes.slice(1); // ["Michel", "15/08"]
+      const nomeTemplate = partes[0];
+      const variaveisSalvas = partes.slice(1);
       
       const templateEncontrado = templatesMeta.find(t => t.id === nomeTemplate);
 
       if (templateEncontrado && templateEncontrado.corpo) {
         let corpoFormatado = templateEncontrado.corpo;
         
-        // Se houver variáveis salvas, varre o texto e substitui {{1}}, {{2}}...
         if (variaveisSalvas.length > 0) {
           variaveisSalvas.forEach((valorDaVariavel, index) => {
-            // Cria uma regra para achar exatamente {{1}}, {{2}}, etc.
             const tag = new RegExp(`\\{\\{${index + 1}\\}\\}`, 'g');
             corpoFormatado = corpoFormatado.replace(tag, valorDaVariavel);
           });
@@ -278,17 +273,14 @@ function App() {
       
       return <p className="text-gray-800 text-[15px] italic text-gray-600">📢 Disparo: {nomeTemplate}</p>;
     }
-      
-      return <p className="text-gray-800 text-[15px] italic text-gray-600">📢 Disparo: {nomeTemplate}</p>;
-    }
     
+    // Fallback para texto normal
     return <p className="text-gray-800 text-[15px] whitespace-pre-wrap">{texto}</p>;
   };
 
   return (
     <div className="flex h-screen bg-gray-50 font-sans text-gray-800 overflow-hidden">
       
-      {/* 1. BARRA LATERAL FINA (ESCURA) - Oculta no mobile se o chat estiver aberto */}
       <div className={`bg-[#0b141a] flex-col items-center py-6 justify-between z-20 shadow-xl transition-all ${
         telefoneAtivo && abaAtiva === 'chat' ? 'hidden md:flex w-[70px]' : 'flex w-[70px]'
       }`}>
@@ -321,7 +313,6 @@ function App() {
         </button>
       </div>
 
-      {/* 2. COLUNA DO MENU (CONTATOS / OPÇÕES) - Oculta no mobile se o chat ou disparo estiverem abertos */}
       <div className={`bg-white border-r border-gray-200 flex-col z-10 shadow-sm ${
         abaAtiva === 'disparo' ? 'hidden md:flex md:w-[320px]' : (telefoneAtivo && abaAtiva === 'chat' ? 'hidden md:flex md:w-[320px]' : 'flex flex-1 md:w-[320px] md:flex-none')
       }`}>
@@ -364,7 +355,6 @@ function App() {
         )}
       </div>
 
-      {/* 3. PAINEL CENTRAL (TELA DE TRABALHO) - Oculta no mobile se a lista de contatos estiver aberta */}
       <div className={`bg-gray-50 relative overflow-hidden flex-1 ${
         abaAtiva === 'chat' && !telefoneAtivo ? 'hidden md:flex flex-col' : 'flex flex-col'
       }`}>
@@ -432,7 +422,6 @@ function App() {
             {telefoneAtivo ? (
               <div className="flex-1 flex flex-col z-10 w-full h-full bg-white/40 backdrop-blur-sm">
                 
-                {/* ✨ CABEÇALHO DO CHAT - AGORA COM O BOTÃO DE VOLTAR NO MOBILE */}
                 <div className="h-16 bg-white flex items-center px-4 md:px-6 shadow-sm sticky top-0 z-20">
                   <button 
                     onClick={() => setTelefoneAtivo(null)} 
