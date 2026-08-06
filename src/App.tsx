@@ -91,42 +91,41 @@ function App() {
 
     const pacoteMensagens = dadosPlanilha.map((linha, index) => {
       const variaveisDinamicas = templateSelecionado.variaveis.map((varName: string) => {
-        const colunaMapeada = mapeamento[varName];
-        if (!colunaMapeada) return '';
+  const colunaMapeada = mapeamento[varName];
+  if (!colunaMapeada) return '';
 
-        let valorBruto = String(linha[colunaMapeada] || '').trim();
+  const dadoBruto = linha[colunaMapeada];
 
-        // 🛡️ TRATAMENTO CIRÚRGICO DE DATA BRUTA (DD/MM/AAAA)
-        // Se a string contém barras (ex: "16/07/2026"), nós ignoramos qualquer conversão 
-        // de data do JS e pegamos as fatias exatas da string do CSV.
-        if (valorBruto.includes('/')) {
-          const partes = valorBruto.split('/');
-          if (partes.length === 3) {
-            let [p1, p2, p3] = partes;
-            
-            // Se o formato veio como MM/DD/YYYY por engano do parser, corrigimos na marra,
-            // mas pelo seu CSV o p1 é o dia (16) e p2 é o mês (07). 
-            // Vamos garantir que fiquem travados na ordem exata: Dia / Mês / Ano
-            let dia = p1.padStart(2, '0');
-            let mes = p2.padStart(2, '0');
-            let ano = p3;
-            if (ano.length === 2) ano = `20${ano}`;
+  // 1. PRIMEIRO: Testamos se é uma Data do JS (Aqui o +1 é obrigatório)
+  if (dadoBruto instanceof Date) {
+    const dia = String(dadoBruto.getUTCDate()).padStart(2, '0');
+    // O +1 conserta a falha do JavaScript que acha que Agosto é o mês 7
+    const mes = String(dadoBruto.getUTCMonth() + 1).padStart(2, '0'); 
+    const ano = dadoBruto.getUTCFullYear();
+    return `${dia}/${mes}/${ano}`;
+  }
 
-            return `${dia}/${mes}/${ano}`;
-          }
-        }
+  // 2. SEGUNDO: Se não for Date, transformamos e tratamos como Texto 
+  let valorTexto = String(dadoBruto || '').trim();
 
-        // Se por acaso vier como objeto Date do JS:
-        if (linha[colunaMapeada] instanceof Date) {
-          const d = linha[colunaMapeada] as Date;
-          const dia = String(d.getUTCDate()).padStart(2, '0');
-          const mes = String(d.getUTCMonth() + 1).padStart(2, '0');
-          const ano = d.getUTCFullYear();
-          return `${dia}/${mes}/${ano}`;
-        }
+  // Tratamento cirúrgico da string
+  if (valorTexto.includes('/')) {
+    const partes = valorTexto.split('/');
+    if (partes.length === 3) {
+      let [p1, p2, p3] = partes;
+      
+      let dia = p1.padStart(2, '0');
+      // Não precisa de +1, pois o texto "08" continua sendo apenas "08"
+      let mes = p2.padStart(2, '0'); 
+      let ano = p3;
+      
+      if (ano.length === 2) ano = `20${ano}`;
+      return `${dia}/${mes}/${ano}`;
+    }
+  }
 
-        return valorBruto;
-      });
+  return valorTexto;
+});
 
       let telefoneLimpo = String(linha[colunaTelefoneSelecionada] || '').replace(/\D/g, '');
       if (telefoneLimpo && !telefoneLimpo.startsWith('55')) telefoneLimpo = `55${telefoneLimpo}`;
