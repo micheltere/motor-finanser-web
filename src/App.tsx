@@ -3,7 +3,8 @@ import type { ChangeEvent } from 'react';
 import * as xlsx from 'xlsx';
 import { supabase } from './supabase';
 import Login from './login';
-import { MessageSquare, Send, Lock } from 'lucide-react'; 
+// ✨ ADICIONADO O ÍCONE ArrowLeft (Seta de voltar para o mobile)
+import { MessageSquare, Send, Lock, ArrowLeft } from 'lucide-react'; 
 
 function App() {
   const [autenticado, setAutenticado] = useState<boolean>(() => {
@@ -195,14 +196,11 @@ function App() {
     .sort((a, b) => new Date(a.criado_em).getTime() - new Date(b.criado_em).getTime());
 
   // === FUNÇÕES AUXILIARES PARA FORMATAR MÍDIAS E TEMPLATES ===
-  
-  // Limpa o texto da barra lateral
   const formatarResumoSidebar = (texto: string) => {
     if (!texto) return '';
     if (texto.startsWith('[IMAGEM|')) return '📷 Imagem';
     if (texto.startsWith('[DOCUMENTO|')) return '📄 Documento';
     
-    // Tratamento novo para a barra lateral do chat
     if (texto.startsWith('[Template: ')) {
       const nomeTemplate = texto.replace('[Template: ', '').replace(']', '').trim();
       return `📢 Disparo (${nomeTemplate})`;
@@ -211,11 +209,9 @@ function App() {
     return texto;
   };
 
-  // Transforma o código do banco na tag de imagem, link ou corpo do Template
   const renderizarBolhaMensagem = (texto: string) => {
     if (!texto) return null;
     
-    // 1. Tratamento para IMAGENS
     if (texto.startsWith('[IMAGEM|')) {
       const partes = texto.split('|');
       const mediaId = partes[1];
@@ -230,7 +226,6 @@ function App() {
       );
     }
     
-    // 2. Tratamento para PDFs / DOCUMENTOS
     if (texto.startsWith('[DOCUMENTO|')) {
       const partes = texto.split('|');
       const mediaId = partes[1];
@@ -245,7 +240,6 @@ function App() {
       );
     }
     
-    // 3. ✨ NOVO: Tratamento para TEMPLATES (Lê da memória e exibe)
     if (texto.startsWith('[Template: ')) {
       const nomeTemplate = texto.replace('[Template: ', '').replace(']', '').trim();
       const templateEncontrado = templatesMeta.find(t => t.id === nomeTemplate);
@@ -266,18 +260,19 @@ function App() {
       return <p className="text-gray-800 text-[15px] italic text-gray-600">📢 Disparo: {nomeTemplate}</p>;
     }
     
-    // 4. Se for texto normal digitado, só retorna o texto
     return <p className="text-gray-800 text-[15px] whitespace-pre-wrap">{texto}</p>;
   };
 
   return (
     <div className="flex h-screen bg-gray-50 font-sans text-gray-800 overflow-hidden">
       
-      {/* 1. BARRA LATERAL FINA (ESCURA) */}
-      <div className="w-[70px] bg-[#0b141a] flex flex-col items-center py-6 justify-between z-20 shadow-xl">
+      {/* 1. BARRA LATERAL FINA (ESCURA) - Oculta no mobile se o chat estiver aberto */}
+      <div className={`bg-[#0b141a] flex-col items-center py-6 justify-between z-20 shadow-xl transition-all ${
+        telefoneAtivo && abaAtiva === 'chat' ? 'hidden md:flex w-[70px]' : 'flex w-[70px]'
+      }`}>
         <div className="flex flex-col gap-6 w-full px-3">
           <button 
-            onClick={() => setAbaAtiva('chat')}
+            onClick={() => { setAbaAtiva('chat'); setTelefoneAtivo(null); }}
             className={`w-full aspect-square rounded-xl flex items-center justify-center transition-all ${
               abaAtiva === 'chat' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-400 hover:text-white hover:bg-white/10'
             }`}
@@ -286,7 +281,7 @@ function App() {
             <MessageSquare size={24} />
           </button>
           <button 
-            onClick={() => setAbaAtiva('disparo')}
+            onClick={() => { setAbaAtiva('disparo'); setTelefoneAtivo(null); }}
             className={`w-full aspect-square rounded-xl flex items-center justify-center transition-all ${
               abaAtiva === 'disparo' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-400 hover:text-white hover:bg-white/10'
             }`}
@@ -304,8 +299,10 @@ function App() {
         </button>
       </div>
 
-      {/* 2. COLUNA DO MENU (CONTATOS / OPÇÕES) */}
-      <div className="w-[320px] bg-white border-r border-gray-200 flex flex-col z-10 shadow-sm">
+      {/* 2. COLUNA DO MENU (CONTATOS / OPÇÕES) - Oculta no mobile se o chat ou disparo estiverem abertos */}
+      <div className={`bg-white border-r border-gray-200 flex-col z-10 shadow-sm ${
+        abaAtiva === 'disparo' ? 'hidden md:flex md:w-[320px]' : (telefoneAtivo && abaAtiva === 'chat' ? 'hidden md:flex md:w-[320px]' : 'flex flex-1 md:w-[320px] md:flex-none')
+      }`}>
         {abaAtiva === 'chat' ? (
           <>
             <div className="h-16 border-b border-gray-100 flex items-center px-6">
@@ -345,21 +342,23 @@ function App() {
         )}
       </div>
 
-      {/* 3. PAINEL CENTRAL (TELA DE TRABALHO) */}
-      <div className="flex-1 flex flex-col bg-gray-50 relative overflow-hidden">
+      {/* 3. PAINEL CENTRAL (TELA DE TRABALHO) - Oculta no mobile se a lista de contatos estiver aberta */}
+      <div className={`bg-gray-50 relative overflow-hidden flex-1 ${
+        abaAtiva === 'chat' && !telefoneAtivo ? 'hidden md:flex flex-col' : 'flex flex-col'
+      }`}>
         {abaAtiva === 'disparo' ? (
-           <div className="p-10 w-full max-w-4xl mx-auto overflow-y-auto h-full">
-             <h1 className="text-3xl font-bold text-gray-800 mb-8">Disparo Inteligente</h1>
+           <div className="p-4 md:p-10 w-full max-w-4xl mx-auto overflow-y-auto h-full">
+             <h1 className="text-2xl md:text-3xl font-bold text-gray-800 mb-6 md:mb-8">Disparo Inteligente</h1>
              
-             <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 mb-6">
+             <div className="bg-white p-5 md:p-8 rounded-2xl shadow-sm border border-gray-100 mb-6">
                <label className="block text-sm font-bold text-gray-700 mb-4">1. Importar Planilha</label>
                <input type="file" accept=".csv, .xlsx, .xls" onChange={lidarComArquivo} className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 transition-colors" />
                {statusDisparo && <p className="mt-4 text-sm font-medium text-blue-600 bg-blue-50 p-3 rounded-lg border border-blue-100">{statusDisparo}</p>}
              </div>
 
              {colunasExcel.length > 0 && (
-               <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 mb-6 animate-fade-in">
-                 <div className="bg-green-50 p-5 rounded-xl border border-green-100 mb-6">
+               <div className="bg-white p-5 md:p-8 rounded-2xl shadow-sm border border-gray-100 mb-6 animate-fade-in">
+                 <div className="bg-green-50 p-4 md:p-5 rounded-xl border border-green-100 mb-6">
                    <h3 className="text-sm font-bold text-green-800 mb-3">2. Qual coluna tem os números de WhatsApp?</h3>
                    <select className="w-full p-3 rounded-lg border-green-200 text-gray-700 focus:ring-green-500 focus:border-green-500 outline-none" onChange={(e) => setColunaTelefoneSelecionada(e.target.value)}>
                      <option value="">Selecione a coluna...</option>
@@ -373,23 +372,23 @@ function App() {
                  </select>
 
                  {templateSelecionado && templateSelecionado.id !== 'selecione' && templateSelecionado.corpo && (
-                   <div className="bg-[#dcf8c6] p-5 rounded-xl border border-green-200/50 mb-6 relative shadow-sm max-w-[85%]">
+                   <div className="bg-[#dcf8c6] p-4 md:p-5 rounded-xl border border-green-200/50 mb-6 relative shadow-sm w-full md:max-w-[85%]">
                      <span className="absolute top-2 right-3 text-[10px] font-bold text-green-600/70 uppercase tracking-wider">
                        Pré-visualização
                      </span>
-                     <p className="text-gray-800 text-[15px] whitespace-pre-wrap leading-relaxed mt-2">
+                     <p className="text-gray-800 text-[14px] md:text-[15px] whitespace-pre-wrap leading-relaxed mt-2">
                        {templateSelecionado.corpo}
                      </p>
                    </div>
                  )}
 
                  {templateSelecionado?.variaveis.length > 0 && (
-                   <div className="bg-orange-50 p-6 rounded-xl border border-orange-100">
+                   <div className="bg-orange-50 p-4 md:p-6 rounded-xl border border-orange-100">
                      <h3 className="text-sm font-bold text-orange-800 mb-4">4. Preencha as Variáveis do Texto</h3>
                      {templateSelecionado.variaveis.map((variavel: string) => (
-                       <div key={variavel} className="flex items-center justify-between mb-3 bg-white p-3 rounded-lg border shadow-sm">
+                       <div key={variavel} className="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-3 bg-white p-3 rounded-lg border shadow-sm">
                          <span className="text-sm font-bold text-gray-700">{variavel}</span>
-                         <select className="w-1/2 p-2 border-gray-200 rounded-md text-sm outline-none focus:border-blue-500" onChange={(e) => atualizarMapeamento(variavel, e.target.value)}>
+                         <select className="w-full md:w-1/2 p-2 border-gray-200 rounded-md text-sm outline-none focus:border-blue-500" onChange={(e) => atualizarMapeamento(variavel, e.target.value)}>
                            <option value="">Buscar de qual coluna?</option>
                            {colunasExcel.map(col => <option key={col} value={col}>{col}</option>)}
                          </select>
@@ -401,7 +400,7 @@ function App() {
              )}
 
              {colunasExcel.length > 0 && (
-               <button onClick={dispararCampanha} className="w-full bg-blue-600 hover:bg-blue-700 text-white px-8 py-5 rounded-2xl font-bold text-lg shadow-lg shadow-blue-500/30 transition-all hover:-translate-y-1">🚀 Iniciar Disparo em Massa</button>
+               <button onClick={dispararCampanha} className="w-full bg-blue-600 hover:bg-blue-700 text-white px-8 py-5 rounded-2xl font-bold text-lg shadow-lg shadow-blue-500/30 transition-all hover:-translate-y-1 mb-8">🚀 Iniciar Disparo em Massa</button>
              )}
            </div>
         ) : (
@@ -410,17 +409,26 @@ function App() {
 
             {telefoneAtivo ? (
               <div className="flex-1 flex flex-col z-10 w-full h-full bg-white/40 backdrop-blur-sm">
-                <div className="h-16 bg-white flex items-center px-6 shadow-sm sticky top-0 z-20">
-                  <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center mr-4">
+                
+                {/* ✨ CABEÇALHO DO CHAT - AGORA COM O BOTÃO DE VOLTAR NO MOBILE */}
+                <div className="h-16 bg-white flex items-center px-4 md:px-6 shadow-sm sticky top-0 z-20">
+                  <button 
+                    onClick={() => setTelefoneAtivo(null)} 
+                    className="md:hidden mr-3 p-2 bg-gray-100 rounded-full text-gray-600 hover:bg-gray-200 transition-colors"
+                  >
+                    <ArrowLeft size={20} />
+                  </button>
+
+                  <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center mr-3 md:mr-4">
                     <span className="text-gray-500 font-bold">{telefoneAtivo.substring(0, 2)}</span>
                   </div>
-                  <h2 className="font-bold text-gray-800 text-lg">{telefoneAtivo}</h2>
+                  <h2 className="font-bold text-gray-800 text-lg truncate">{telefoneAtivo}</h2>
                 </div>
                 
-                <div className="flex-1 p-6 overflow-y-auto flex flex-col gap-3">
+                <div className="flex-1 p-4 md:p-6 overflow-y-auto flex flex-col gap-3">
                   {mensagensDoContato.map((msg, idx) => (
                     <div key={idx} className={`flex ${msg.direcao === 'enviada' ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`p-3 rounded-lg shadow-sm max-w-[80%] relative ${
+                      <div className={`p-3 rounded-lg shadow-sm max-w-[90%] md:max-w-[80%] relative ${
                         msg.direcao === 'enviada' ? 'bg-[#dcf8c6] rounded-tr-none' : 'bg-white rounded-tl-none border border-gray-100'
                       }`}>
                         
@@ -443,7 +451,7 @@ function App() {
                   ))}
                 </div>
 
-                <div className="p-4 bg-[#f0f2f5] border-t sticky bottom-0">
+                <div className="p-3 md:p-4 bg-[#f0f2f5] border-t sticky bottom-0">
                   <input 
                     type="text" 
                     placeholder={enviandoMensagem ? "Enviando..." : "Digite uma mensagem..."} 
