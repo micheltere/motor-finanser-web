@@ -358,6 +358,18 @@ function App() {
                    {templatesMeta.map(tpl => <option key={tpl.id} value={tpl.id}>{tpl.nome}</option>)}
                  </select>
 
+{/* ✨ NOVO: CAIXA DE PRÉ-VISUALIZAÇÃO DO TEMPLATE */}
+                 {templateSelecionado && templateSelecionado.id !== 'selecione' && templateSelecionado.corpo && (
+                   <div className="bg-[#dcf8c6] p-5 rounded-xl border border-green-200/50 mb-6 relative shadow-sm max-w-[85%]">
+                     <span className="absolute top-2 right-3 text-[10px] font-bold text-green-600/70 uppercase tracking-wider">
+                       Pré-visualização
+                     </span>
+                     <p className="text-gray-800 text-[15px] whitespace-pre-wrap leading-relaxed mt-2">
+                       {templateSelecionado.corpo}
+                     </p>
+                   </div>
+                 )}
+
                  {templateSelecionado?.variaveis.length > 0 && (
                    <div className="bg-orange-50 p-6 rounded-xl border border-orange-100">
                      <h3 className="text-sm font-bold text-orange-800 mb-4">4. Preencha as Variáveis do Texto</h3>
