@@ -194,41 +194,85 @@ function App() {
     .filter(msg => msg.telefone_cliente === telefoneAtivo)
     .sort((a, b) => new Date(a.criado_em).getTime() - new Date(b.criado_em).getTime());
 
-  // === FUNÇÕES AUXILIARES PARA FORMATAR MÍDIAS ===
+// === FUNÇÕES AUXILIARES PARA FORMATAR MÍDIAS E TEMPLATES ===
   
-  // Limpa o texto da barra lateral (Ex: de "[IMAGEM|123|]" para "📷 Imagem")
+  // Limpa o texto da barra lateral
   const formatarResumoSidebar = (texto: string) => {
     if (!texto) return '';
     if (texto.startsWith('[IMAGEM|')) return '📷 Imagem';
     if (texto.startsWith('[DOCUMENTO|')) return '📄 Documento';
+    
+    // Tratamento novo para a barra lateral do chat
+    if (texto.startsWith('[Template: ')) {
+      const nomeTemplate = texto.replace('[Template: ', '').replace(']', '').trim();
+      return `📢 Disparo (${nomeTemplate})`;
+    }
+    
     return texto;
   };
 
-  // Transforma o código do banco na tag de imagem ou link de download
+  // Transforma o código do banco na tag de imagem, link ou corpo do Template
   const renderizarBolhaMensagem = (texto: string) => {
     if (!texto) return null;
     
-    // Tratamento para IMAGENS
+    // 1. Tratamento para IMAGENS
     if (texto.startsWith('[IMAGEM|')) {
       const partes = texto.split('|');
       const mediaId = partes[1];
       const legenda = partes[2] && partes[2] !== ']' ? partes[2].replace(']', '') : '';
-      
-      // Bate lá no nosso motor do Render que faz o download
       const urlMidia = `https://motor-finanser-api.onrender.com/api/media/${mediaId}`;
 
       return (
         <div className="flex flex-col gap-2">
-          <img 
-            src={urlMidia} 
-            alt="Mídia recebida" 
-            className="max-w-[280px] rounded-lg border border-gray-200 shadow-sm bg-gray-50"
-            loading="lazy"
-          />
+          <img src={urlMidia} alt="Mídia recebida" className="max-w-[280px] rounded-lg border border-gray-200 shadow-sm bg-gray-50" loading="lazy" />
           {legenda && <span className="text-sm text-gray-700">{legenda}</span>}
         </div>
       );
     }
+    
+    // 2. Tratamento para PDFs / DOCUMENTOS
+    if (texto.startsWith('[DOCUMENTO|')) {
+      const partes = texto.split('|');
+      const mediaId = partes[1];
+      const nomeArquivo = partes[2] ? partes[2].replace(']', '') : 'Documento';
+      const urlDoc = `https://motor-finanser-api.onrender.com/api/media/${mediaId}`;
+
+      return (
+        <a href={urlDoc} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 p-3 bg-white/60 border border-gray-200 rounded-lg text-blue-600 hover:text-blue-800 hover:bg-white transition-colors">
+          <span className="text-xl">📄</span>
+          <span className="text-sm font-semibold truncate max-w-[200px]">{nomeArquivo}</span>
+        </a>
+      );
+    }
+    
+    // 3. ✨ NOVO: Tratamento para TEMPLATES (Lê da memória e exibe)
+    if (texto.startsWith('[Template: ')) {
+      // Extrai o nome limpo do template. Ex: "vencimento_proximo_v3"
+      const nomeTemplate = texto.replace('[Template: ', '').replace(']', '').trim();
+      
+      // Procura o texto real dele na lista que a Meta enviou
+      const templateEncontrado = templatesMeta.find(t => t.id === nomeTemplate);
+
+      if (templateEncontrado && templateEncontrado.corpo) {
+        return (
+          <div className="flex flex-col">
+            <span className="text-[10px] font-bold text-green-700/60 uppercase tracking-wider mb-2 border-b border-green-700/10 pb-1">
+              Campanha: {templateEncontrado.nome}
+            </span>
+            <p className="text-gray-800 text-[15px] whitespace-pre-wrap leading-relaxed">
+              {templateEncontrado.corpo}
+            </p>
+          </div>
+        );
+      }
+      
+      // Fallback caso o template não esteja mais na memória
+      return <p className="text-gray-800 text-[15px] italic text-gray-600">📢 Disparo: {nomeTemplate}</p>;
+    }
+    
+    // 4. Se for texto normal digitado, só retorna o texto
+    return <p className="text-gray-800 text-[15px] whitespace-pre-wrap">{texto}</p>;
+  };
     
     // Tratamento para PDFs / DOCUMENTOS
     if (texto.startsWith('[DOCUMENTO|')) {
