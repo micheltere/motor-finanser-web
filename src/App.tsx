@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import type { ChangeEvent } from 'react';
 import * as xlsx from 'xlsx';
 import { supabase } from './supabase';
-import Login from './Login'; // IMPORT DA NOVA TELA DE LOGIN
+import Login from './login'; // IMPORT DA NOVA TELA DE LOGIN
 
 function App() {
   // ==========================================
