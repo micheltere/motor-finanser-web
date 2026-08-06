@@ -2,35 +2,31 @@ import { useState, useEffect } from 'react';
 import type { ChangeEvent } from 'react';
 import * as xlsx from 'xlsx';
 import { supabase } from './supabase';
-import Login from './login'; // IMPORT DA NOVA TELA DE LOGIN
+import Login from './login';
+import { MessageSquare, Send, Lock } from 'lucide-react'; // Ícones adicionados!
 
 function App() {
-  // ==========================================
-  // 1. SISTEMA DE AUTENTICAÇÃO (A BARREIRA)
-  // ==========================================
   const [autenticado, setAutenticado] = useState<boolean>(() => {
-    // Lê do navegador se o usuário já fez login antes
     return localStorage.getItem('finanser_auth') === 'true';
   });
 
   const fazerLogin = (senhaDigitada: string) => {
-    // Senha de acesso ao sistema (Pode alterar para a que preferir)
     if (senhaDigitada === 'finanser2026') {
       localStorage.setItem('finanser_auth', 'true');
       setAutenticado(true);
     }
   };
 
-  // ==========================================
-  // 2. ESTADOS DO SISTEMA (CHAT E DISPAROS)
-  // ==========================================
-  const [abaAtiva, setAbaAtiva] = useState<'disparo' | 'chat'>('disparo');
+  const fazerLogout = () => {
+    localStorage.removeItem('finanser_auth');
+    setAutenticado(false);
+  };
+
+  const [abaAtiva, setAbaAtiva] = useState<'disparo' | 'chat'>('chat');
   
-  // Chat
   const [conversas, setConversas] = useState<any[]>([]);
   const [telefoneAtivo, setTelefoneAtivo] = useState<string | null>(null);
 
-  // Disparo e Templates
   const [colunasExcel, setColunasExcel] = useState<string[]>([]);
   const [dadosPlanilha, setDadosPlanilha] = useState<any[]>([]);
   const [templatesMeta, setTemplatesMeta] = useState<any[]>([{ id: 'selecione', nome: '🔄 Carregando...', variaveis: [] }]);
@@ -42,17 +38,10 @@ function App() {
   const [mensagemDigitada, setMensagemDigitada] = useState('');
   const [enviandoMensagem, setEnviandoMensagem] = useState(false);
 
-  // ==========================================
-  // 3. SE NÃO ESTIVER LOGADO, TRAVA NA TELA DE LOGIN
-  // ==========================================
   if (!autenticado) {
     return <Login onLogin={fazerLogin} />;
   }
 
-  // ==========================================
-  // 4. EFEITOS E FUNÇÕES (SÓ RODAM SE LOGADO)
-  // ==========================================
-  // EFEITO: Busca Mensagens
   useEffect(() => {
     const buscarMensagens = async () => {
       const { data, error } = await supabase.from('mensagens').select('*').order('criado_em', { ascending: false });
@@ -77,7 +66,6 @@ function App() {
     buscarMensagens();
     buscarTemplates();
 
-    // Opcional: Atualiza o chat a cada 5 segundos para ver o status mudando em tempo real
     const intervalo = setInterval(buscarMensagens, 5000);
     return () => clearInterval(intervalo);
   }, []);
@@ -121,34 +109,26 @@ function App() {
 
         const dadoBruto = linha[colunaMapeada];
 
-        // 1. PRIMEIRO: Testamos se é uma Data do JS (Aqui o +1 é obrigatório)
         if (dadoBruto instanceof Date) {
           const dia = String(dadoBruto.getUTCDate()).padStart(2, '0');
-          // O +1 conserta a falha do JavaScript que acha que Agosto é o mês 7
           const mes = String(dadoBruto.getUTCMonth() + 1).padStart(2, '0'); 
           const ano = dadoBruto.getUTCFullYear();
           return `${dia}/${mes}/${ano}`;
         }
 
-        // 2. SEGUNDO: Se não for Date, transformamos e tratamos como Texto 
         let valorTexto = String(dadoBruto || '').trim();
 
-        // Tratamento cirúrgico da string
         if (valorTexto.includes('/')) {
           const partes = valorTexto.split('/');
           if (partes.length === 3) {
             let [p1, p2, p3] = partes;
-            
             let dia = p1.padStart(2, '0');
-            // Não precisa de +1, pois o texto "08" continua sendo apenas "08"
             let mes = p2.padStart(2, '0'); 
             let ano = p3;
-            
             if (ano.length === 2) ano = `20${ano}`;
             return `${dia}/${mes}/${ano}`;
           }
         }
-
         return valorTexto;
       });
 
@@ -168,8 +148,6 @@ function App() {
 
       if (resposta.ok) {
         setStatusDisparo(`🚀 SUCESSO! ${pacoteMensagens.length} mensagens disparadas!`);
-      
-        // ✨ ATUALIZA A TELA NA HORA: Puxa o histórico logo após o motor gravar no banco
         const { data } = await supabase.from('mensagens').select('*').order('criado_em', { ascending: false });
         if (data) setConversas(data);
       } else {
@@ -192,8 +170,7 @@ function App() {
         });
 
         if (resposta.ok) {
-          setMensagemDigitada(''); // Limpa o campo
-          // Atualiza o chat puxando do banco
+          setMensagemDigitada(''); 
           const { data } = await supabase.from('mensagens').select('*').order('criado_em', { ascending: false });
           if (data) setConversas(data);
         } else {
@@ -207,118 +184,172 @@ function App() {
     }
   };
 
-  // 1. Lógica da Barra Lateral (Agrupar um contato por número)
   const contatosUnicos = conversas.reduce((acc, msg) => {
-    if (!acc[msg.telefone_cliente]) acc[msg.telefone_cliente] = msg; // Pega só a mais recente
+    if (!acc[msg.telefone_cliente]) acc[msg.telefone_cliente] = msg; 
     return acc;
   }, {});
   const listaContatos: any[] = Object.values(contatosUnicos);
-
-  // 2. Lógica do Painel Central (Pegar todo o histórico do número selecionado)
+  
   const mensagensDoContato = conversas
     .filter(msg => msg.telefone_cliente === telefoneAtivo)
-    .sort((a, b) => new Date(a.criado_em).getTime() - new Date(b.criado_em).getTime()); // Ordena da mais antiga para mais nova
+    .sort((a, b) => new Date(a.criado_em).getTime() - new Date(b.criado_em).getTime());
 
   // ==========================================
-  // 5. RENDERIZAÇÃO DA INTERFACE OFICIAL
+  // NOVO LAYOUT REPLICANDO O PRINT
   // ==========================================
   return (
-    <div className="flex h-screen bg-gray-50 font-sans text-gray-800">
+    <div className="flex h-screen bg-gray-50 font-sans text-gray-800 overflow-hidden">
       
-      {/* BARRA LATERAL */}
-      <div className="w-1/3 max-w-sm bg-white border-r border-gray-200 flex flex-col z-10 shadow-sm">
-        <div className="p-4 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
-          <h2 className="font-bold text-lg text-gray-800">Motor FINANSER</h2>
-        </div>
-        <div className="p-4 border-b border-gray-200">
-          <button onClick={() => setAbaAtiva('disparo')} className={`w-full py-2.5 rounded-lg font-semibold transition ${abaAtiva === 'disparo' ? 'bg-green-600 text-white' : 'bg-green-50 text-green-700'}`}>+ Nova Campanha</button>
+      {/* 1. BARRA LATERAL FINA (ESCURA) */}
+      <div className="w-[70px] bg-[#0b141a] flex flex-col items-center py-6 justify-between z-20 shadow-xl">
+        <div className="flex flex-col gap-6 w-full px-3">
+          {/* Botão Chat */}
+          <button 
+            onClick={() => setAbaAtiva('chat')}
+            className={`w-full aspect-square rounded-xl flex items-center justify-center transition-all ${
+              abaAtiva === 'chat' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-400 hover:text-white hover:bg-white/10'
+            }`}
+            title="Atendimentos"
+          >
+            <MessageSquare size={24} />
+          </button>
+
+          {/* Botão Disparos */}
+          <button 
+            onClick={() => setAbaAtiva('disparo')}
+            className={`w-full aspect-square rounded-xl flex items-center justify-center transition-all ${
+              abaAtiva === 'disparo' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-400 hover:text-white hover:bg-white/10'
+            }`}
+            title="Disparos em Massa"
+          >
+            <Send size={24} className="ml-1" /> 
+          </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto">
-          <div className="px-4 py-2 bg-gray-100 text-xs font-bold text-gray-500 uppercase sticky top-0">Contatos</div>
-          {listaContatos.map((contato, index) => (
-            <div key={index} onClick={() => { setTelefoneAtivo(contato.telefone_cliente); setAbaAtiva('chat'); }}
-              className={`p-4 border-b border-gray-100 cursor-pointer hover:bg-gray-50 ${telefoneAtivo === contato.telefone_cliente && abaAtiva === 'chat' ? 'bg-blue-50 border-l-4 border-l-blue-500' : 'border-l-4 border-l-transparent'}`}
-            >
-              <h3 className="font-semibold text-gray-800">{contato.telefone_cliente}</h3>
-              <p className="text-sm text-gray-500 truncate">{contato.texto_mensagem}</p>
-            </div>
-          ))}
-        </div>
+        {/* Botão Logout (Cadeado) */}
+        <button 
+          onClick={fazerLogout}
+          className="text-gray-400 hover:text-red-400 transition-colors mb-2"
+          title="Sair do sistema"
+        >
+          <Lock size={22} />
+        </button>
       </div>
 
-      {/* PAINEL CENTRAL */}
-      <div className="flex-1 flex flex-col bg-gray-50 overflow-y-auto">
-        {abaAtiva === 'disparo' ? (
-           // TELA DE DISPARO (MANTIDA INTACTA)
-           <div className="p-8 max-w-4xl mx-auto w-full">
-           <h1 className="text-2xl font-bold text-gray-800 mb-2">Disparo Inteligente</h1>
-           {/* ... Mapeamento normal dos botões de disparo ... */}
-           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mb-6">
-             <input type="file" accept=".csv, .xlsx, .xls" onChange={lidarComArquivo} className="mb-4" />
-             {statusDisparo && <p className="text-sm font-medium text-blue-600 bg-blue-50 p-2 rounded">{statusDisparo}</p>}
-           </div>
-
-           {colunasExcel.length > 0 && (
-             <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mb-6">
-               <div className="bg-green-50 p-4 rounded-lg mb-6">
-                 <h3 className="text-sm font-bold text-green-800 mb-2">Coluna de WhatsApp</h3>
-                 <select className="w-full p-2" onChange={(e) => setColunaTelefoneSelecionada(e.target.value)}>
-                   <option value="">Selecione...</option>
-                   {colunasExcel.map(col => <option key={col} value={col}>{col}</option>)}
-                 </select>
-               </div>
-               
-               <select className="w-full p-3 mb-6 bg-gray-50 border" onChange={(e) => setTemplateSelecionado(templatesMeta.find(t => t.id === e.target.value))}>
-                 {templatesMeta.map(tpl => <option key={tpl.id} value={tpl.id}>{tpl.nome}</option>)}
-               </select>
-
-               {templateSelecionado?.variaveis.length > 0 && (
-                 <div className="bg-orange-50 p-5 rounded-lg">
-                   {templateSelecionado.variaveis.map((variavel: string) => (
-                     <div key={variavel} className="flex items-center justify-between mb-3 bg-white p-2 border">
-                       <span><b>{variavel}</b></span>
-                       <select className="w-1/2 p-2 border" onChange={(e) => atualizarMapeamento(variavel, e.target.value)}>
-                         <option value="">Selecione...</option>
-                         {colunasExcel.map(col => <option key={col} value={col}>{col}</option>)}
-                       </select>
-                     </div>
-                   ))}
-                 </div>
-               )}
-             </div>
-           )}
-
-           {colunasExcel.length > 0 && (
-             <button onClick={dispararCampanha} className="w-full bg-green-600 text-white px-8 py-4 rounded-xl font-bold">🚀 INICIAR DISPAROS</button>
-           )}
-         </div>
+      {/* 2. COLUNA DO MENU (CONTATOS / OPÇÕES) */}
+      <div className="w-[320px] bg-white border-r border-gray-200 flex flex-col z-10 shadow-sm">
+        {abaAtiva === 'chat' ? (
+          <>
+            <div className="h-16 border-b border-gray-100 flex items-center px-6">
+              <h2 className="font-bold text-lg text-[#111b21]">Atendimentos</h2>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto">
+              <div className="px-6 py-2 bg-[#f0f2f5] text-[11px] font-bold text-gray-500 uppercase tracking-wider sticky top-0">
+                Contatos
+              </div>
+              {listaContatos.map((contato, index) => (
+                <div key={index} onClick={() => setTelefoneAtivo(contato.telefone_cliente)}
+                  className={`p-4 border-b border-gray-50 cursor-pointer flex flex-col transition-colors ${
+                    telefoneAtivo === contato.telefone_cliente ? 'bg-[#f0f2f5]' : 'hover:bg-gray-50'
+                  }`}
+                >
+                  <h3 className="font-semibold text-gray-800 text-sm">{contato.telefone_cliente}</h3>
+                  <p className="text-xs text-gray-500 truncate mt-1">{contato.texto_mensagem}</p>
+                </div>
+              ))}
+            </div>
+          </>
         ) : (
-          /* ================= TELA DE CHAT (ESTILO WHATSAPP) ================= */
-          <div className="flex-1 flex flex-col h-full bg-[url('https://i.pinimg.com/originals/8c/98/99/8c98994518b575bfd8c949e91d20548b.jpg')] bg-cover bg-center">
+          <>
+            <div className="h-16 border-b border-gray-100 flex items-center px-6">
+              <h2 className="font-bold text-lg text-[#111b21]">Menu de Disparos</h2>
+            </div>
+            <div className="p-6">
+              <p className="text-sm text-gray-500 mb-4">Configure sua planilha na tela principal ao lado.</p>
+              <div className="w-full bg-blue-50 text-blue-700 p-4 rounded-xl border border-blue-100 text-sm font-medium">
+                Módulo ativo e pronto para envio.
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* 3. PAINEL CENTRAL (TELA DE TRABALHO) */}
+      <div className="flex-1 flex flex-col bg-gray-50 relative overflow-hidden">
+        {abaAtiva === 'disparo' ? (
+           // TELA DE DISPARO 
+           <div className="p-10 w-full max-w-4xl mx-auto overflow-y-auto h-full">
+             <h1 className="text-3xl font-bold text-gray-800 mb-8">Disparo Inteligente</h1>
+             
+             <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 mb-6">
+               <label className="block text-sm font-bold text-gray-700 mb-4">1. Importar Planilha</label>
+               <input type="file" accept=".csv, .xlsx, .xls" onChange={lidarComArquivo} className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 transition-colors" />
+               {statusDisparo && <p className="mt-4 text-sm font-medium text-blue-600 bg-blue-50 p-3 rounded-lg border border-blue-100">{statusDisparo}</p>}
+             </div>
+
+             {colunasExcel.length > 0 && (
+               <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 mb-6 animate-fade-in">
+                 <div className="bg-green-50 p-5 rounded-xl border border-green-100 mb-6">
+                   <h3 className="text-sm font-bold text-green-800 mb-3">2. Qual coluna tem os números de WhatsApp?</h3>
+                   <select className="w-full p-3 rounded-lg border-green-200 text-gray-700 focus:ring-green-500 focus:border-green-500 outline-none" onChange={(e) => setColunaTelefoneSelecionada(e.target.value)}>
+                     <option value="">Selecione a coluna...</option>
+                     {colunasExcel.map(col => <option key={col} value={col}>{col}</option>)}
+                   </select>
+                 </div>
+                 
+                 <h3 className="text-sm font-bold text-gray-700 mb-3">3. Escolha a Mensagem (Template)</h3>
+                 <select className="w-full p-3 rounded-lg bg-gray-50 border border-gray-200 mb-6 outline-none focus:ring-blue-500" onChange={(e) => setTemplateSelecionado(templatesMeta.find(t => t.id === e.target.value))}>
+                   {templatesMeta.map(tpl => <option key={tpl.id} value={tpl.id}>{tpl.nome}</option>)}
+                 </select>
+
+                 {templateSelecionado?.variaveis.length > 0 && (
+                   <div className="bg-orange-50 p-6 rounded-xl border border-orange-100">
+                     <h3 className="text-sm font-bold text-orange-800 mb-4">4. Preencha as Variáveis do Texto</h3>
+                     {templateSelecionado.variaveis.map((variavel: string) => (
+                       <div key={variavel} className="flex items-center justify-between mb-3 bg-white p-3 rounded-lg border shadow-sm">
+                         <span className="text-sm font-bold text-gray-700">{variavel}</span>
+                         <select className="w-1/2 p-2 border-gray-200 rounded-md text-sm outline-none focus:border-blue-500" onChange={(e) => atualizarMapeamento(variavel, e.target.value)}>
+                           <option value="">Buscar de qual coluna?</option>
+                           {colunasExcel.map(col => <option key={col} value={col}>{col}</option>)}
+                         </select>
+                       </div>
+                     ))}
+                   </div>
+                 )}
+               </div>
+             )}
+
+             {colunasExcel.length > 0 && (
+               <button onClick={dispararCampanha} className="w-full bg-blue-600 hover:bg-blue-700 text-white px-8 py-5 rounded-2xl font-bold text-lg shadow-lg shadow-blue-500/30 transition-all hover:-translate-y-1">🚀 Iniciar Disparo em Massa</button>
+             )}
+           </div>
+        ) : (
+          /* TELA DE CHAT COM FUNDO WHATSAPP */
+          <div className="flex-1 flex flex-col h-full relative">
+            {/* O fundo desenhado fica atrás de tudo absoluto */}
+            <div className="absolute inset-0 z-0 bg-[url('https://i.pinimg.com/originals/8c/98/99/8c98994518b575bfd8c949e91d20548b.jpg')] bg-cover bg-center opacity-[0.15]"></div>
+
             {telefoneAtivo ? (
-              <>
-                <div className="h-16 bg-white flex items-center px-6 border-b shadow-sm sticky top-0 z-10">
+              <div className="flex-1 flex flex-col z-10 w-full h-full bg-white/40 backdrop-blur-sm">
+                <div className="h-16 bg-white flex items-center px-6 shadow-sm sticky top-0 z-20">
+                  <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center mr-4">
+                    <span className="text-gray-500 font-bold">{telefoneAtivo.substring(0, 2)}</span>
+                  </div>
                   <h2 className="font-bold text-gray-800 text-lg">{telefoneAtivo}</h2>
                 </div>
                 
                 <div className="flex-1 p-6 overflow-y-auto flex flex-col gap-3">
                   {mensagensDoContato.map((msg, idx) => (
-                    // Alinha pra direita se for 'enviada', esquerda se não for
                     <div key={idx} className={`flex ${msg.direcao === 'enviada' ? 'justify-end' : 'justify-start'}`}>
-                      
-                      {/* Cor da bolha: Verde se enviou, Branca se recebeu */}
                       <div className={`p-3 rounded-lg shadow-sm max-w-[80%] relative ${
                         msg.direcao === 'enviada' ? 'bg-[#dcf8c6] rounded-tr-none' : 'bg-white rounded-tl-none border border-gray-100'
                       }`}>
                         <p className="text-gray-800 text-[15px]">{msg.texto_mensagem}</p>
-                        
                         <div className="flex justify-end items-center gap-1 mt-1">
                           <span className="text-[10px] text-gray-500">
                             {new Date(msg.criado_em).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </span>
-                          
-                          {/* Verifica Status apenas nas mensagens enviadas por você */}
                           {msg.direcao === 'enviada' && (
                             <span className="text-[12px] ml-1">
                               {msg.status === 'sent' && <span className="text-gray-400">✓</span>}
@@ -332,23 +363,23 @@ function App() {
                   ))}
                 </div>
 
-                <div className="p-4 bg-gray-100 border-t sticky bottom-0">
-                  <div className="p-4 bg-gray-100 border-t sticky bottom-0">
-                    <input 
-                      type="text" 
-                      placeholder={enviandoMensagem ? "Enviando..." : "Digite uma mensagem e aperte Enter..."} 
-                      className="w-full py-3 px-4 rounded-lg bg-white border border-gray-300 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition-all"
-                      value={mensagemDigitada}
-                      onChange={(e) => setMensagemDigitada(e.target.value)}
-                      onKeyDown={enviarMensagemManual}
-                      disabled={enviandoMensagem}
-                    />
-                  </div>
+                <div className="p-4 bg-[#f0f2f5] border-t sticky bottom-0">
+                  <input 
+                    type="text" 
+                    placeholder={enviandoMensagem ? "Enviando..." : "Digite uma mensagem..."} 
+                    className="w-full py-3 px-5 rounded-full bg-white border-0 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-gray-700"
+                    value={mensagemDigitada}
+                    onChange={(e) => setMensagemDigitada(e.target.value)}
+                    onKeyDown={enviarMensagemManual}
+                    disabled={enviandoMensagem}
+                  />
                 </div>
-              </>
+              </div>
             ) : (
-              <div className="flex-1 flex items-center justify-center">
-                <div className="bg-white/90 p-6 rounded-xl shadow-sm text-center font-medium">Selecione um contato na barra lateral</div>
+              <div className="flex-1 flex items-center justify-center z-10 w-full h-full bg-white/30 backdrop-blur-[2px]">
+                <div className="bg-white py-2 px-4 rounded-full shadow-sm text-sm text-gray-500 font-medium">
+                  Selecione um contato na barra lateral
+                </div>
               </div>
             )}
           </div>
