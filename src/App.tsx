@@ -240,22 +240,44 @@ function App() {
       );
     }
     
+    // 3. ✨ NOVO: Tratamento para TEMPLATES com Variáveis
     if (texto.startsWith('[Template: ')) {
-      const nomeTemplate = texto.replace('[Template: ', '').replace(']', '').trim();
+      // Limpa os colchetes e divide o texto. 
+      // Ex de conteudo: "vencimento_proximo_v3 | Michel | 15/08"
+      const conteudoStr = texto.replace('[Template: ', '').replace(/\]$/, '').trim();
+      const partes = conteudoStr.split(' | ');
+      
+      const nomeTemplate = partes[0]; // "vencimento_proximo_v3"
+      const variaveisSalvas = partes.slice(1); // ["Michel", "15/08"]
+      
       const templateEncontrado = templatesMeta.find(t => t.id === nomeTemplate);
 
       if (templateEncontrado && templateEncontrado.corpo) {
+        let corpoFormatado = templateEncontrado.corpo;
+        
+        // Se houver variáveis salvas, varre o texto e substitui {{1}}, {{2}}...
+        if (variaveisSalvas.length > 0) {
+          variaveisSalvas.forEach((valorDaVariavel, index) => {
+            // Cria uma regra para achar exatamente {{1}}, {{2}}, etc.
+            const tag = new RegExp(`\\{\\{${index + 1}\\}\\}`, 'g');
+            corpoFormatado = corpoFormatado.replace(tag, valorDaVariavel);
+          });
+        }
+
         return (
           <div className="flex flex-col">
             <span className="text-[10px] font-bold text-green-700/60 uppercase tracking-wider mb-2 border-b border-green-700/10 pb-1">
               Campanha: {templateEncontrado.nome}
             </span>
             <p className="text-gray-800 text-[15px] whitespace-pre-wrap leading-relaxed">
-              {templateEncontrado.corpo}
+              {corpoFormatado}
             </p>
           </div>
         );
       }
+      
+      return <p className="text-gray-800 text-[15px] italic text-gray-600">📢 Disparo: {nomeTemplate}</p>;
+    }
       
       return <p className="text-gray-800 text-[15px] italic text-gray-600">📢 Disparo: {nomeTemplate}</p>;
     }
