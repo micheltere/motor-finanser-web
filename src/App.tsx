@@ -3,7 +3,7 @@ import type { ChangeEvent } from 'react';
 import * as xlsx from 'xlsx';
 import { supabase } from './supabase';
 import Login from './login';
-import { MessageSquare, Send, Lock } from 'lucide-react'; // Ícones adicionados!
+import { MessageSquare, Send, Lock } from 'lucide-react'; 
 
 function App() {
   const [autenticado, setAutenticado] = useState<boolean>(() => {
@@ -194,16 +194,73 @@ function App() {
     .filter(msg => msg.telefone_cliente === telefoneAtivo)
     .sort((a, b) => new Date(a.criado_em).getTime() - new Date(b.criado_em).getTime());
 
-  // ==========================================
-  // NOVO LAYOUT REPLICANDO O PRINT
-  // ==========================================
+  // === FUNÇÕES AUXILIARES PARA FORMATAR MÍDIAS ===
+  
+  // Limpa o texto da barra lateral (Ex: de "[IMAGEM|123|]" para "📷 Imagem")
+  const formatarResumoSidebar = (texto: string) => {
+    if (!texto) return '';
+    if (texto.startsWith('[IMAGEM|')) return '📷 Imagem';
+    if (texto.startsWith('[DOCUMENTO|')) return '📄 Documento';
+    return texto;
+  };
+
+  // Transforma o código do banco na tag de imagem ou link de download
+  const renderizarBolhaMensagem = (texto: string) => {
+    if (!texto) return null;
+    
+    // Tratamento para IMAGENS
+    if (texto.startsWith('[IMAGEM|')) {
+      const partes = texto.split('|');
+      const mediaId = partes[1];
+      const legenda = partes[2] && partes[2] !== ']' ? partes[2].replace(']', '') : '';
+      
+      // Bate lá no nosso motor do Render que faz o download
+      const urlMidia = `https://motor-finanser-api.onrender.com/api/media/${mediaId}`;
+
+      return (
+        <div className="flex flex-col gap-2">
+          <img 
+            src={urlMidia} 
+            alt="Mídia recebida" 
+            className="max-w-[280px] rounded-lg border border-gray-200 shadow-sm bg-gray-50"
+            loading="lazy"
+          />
+          {legenda && <span className="text-sm text-gray-700">{legenda}</span>}
+        </div>
+      );
+    }
+    
+    // Tratamento para PDFs / DOCUMENTOS
+    if (texto.startsWith('[DOCUMENTO|')) {
+      const partes = texto.split('|');
+      const mediaId = partes[1];
+      const nomeArquivo = partes[2] ? partes[2].replace(']', '') : 'Documento';
+      
+      const urlDoc = `https://motor-finanser-api.onrender.com/api/media/${mediaId}`;
+
+      return (
+        <a 
+          href={urlDoc} 
+          target="_blank" 
+          rel="noopener noreferrer" 
+          className="flex items-center gap-2 p-3 bg-white/60 border border-gray-200 rounded-lg text-blue-600 hover:text-blue-800 hover:bg-white transition-colors"
+        >
+          <span className="text-xl">📄</span>
+          <span className="text-sm font-semibold truncate max-w-[200px]">{nomeArquivo}</span>
+        </a>
+      );
+    }
+    
+    // Se for texto normal, só retorna o texto
+    return <p className="text-gray-800 text-[15px] whitespace-pre-wrap">{texto}</p>;
+  };
+
   return (
     <div className="flex h-screen bg-gray-50 font-sans text-gray-800 overflow-hidden">
       
       {/* 1. BARRA LATERAL FINA (ESCURA) */}
       <div className="w-[70px] bg-[#0b141a] flex flex-col items-center py-6 justify-between z-20 shadow-xl">
         <div className="flex flex-col gap-6 w-full px-3">
-          {/* Botão Chat */}
           <button 
             onClick={() => setAbaAtiva('chat')}
             className={`w-full aspect-square rounded-xl flex items-center justify-center transition-all ${
@@ -213,8 +270,6 @@ function App() {
           >
             <MessageSquare size={24} />
           </button>
-
-          {/* Botão Disparos */}
           <button 
             onClick={() => setAbaAtiva('disparo')}
             className={`w-full aspect-square rounded-xl flex items-center justify-center transition-all ${
@@ -225,8 +280,6 @@ function App() {
             <Send size={24} className="ml-1" /> 
           </button>
         </div>
-
-        {/* Botão Logout (Cadeado) */}
         <button 
           onClick={fazerLogout}
           className="text-gray-400 hover:text-red-400 transition-colors mb-2"
@@ -255,7 +308,10 @@ function App() {
                   }`}
                 >
                   <h3 className="font-semibold text-gray-800 text-sm">{contato.telefone_cliente}</h3>
-                  <p className="text-xs text-gray-500 truncate mt-1">{contato.texto_mensagem}</p>
+                  {/* Aplica a função de resumo para ficar bonito na barra lateral */}
+                  <p className="text-xs text-gray-500 truncate mt-1">
+                    {formatarResumoSidebar(contato.texto_mensagem)}
+                  </p>
                 </div>
               ))}
             </div>
@@ -278,7 +334,6 @@ function App() {
       {/* 3. PAINEL CENTRAL (TELA DE TRABALHO) */}
       <div className="flex-1 flex flex-col bg-gray-50 relative overflow-hidden">
         {abaAtiva === 'disparo' ? (
-           // TELA DE DISPARO 
            <div className="p-10 w-full max-w-4xl mx-auto overflow-y-auto h-full">
              <h1 className="text-3xl font-bold text-gray-800 mb-8">Disparo Inteligente</h1>
              
@@ -325,9 +380,7 @@ function App() {
              )}
            </div>
         ) : (
-          /* TELA DE CHAT COM FUNDO WHATSAPP */
           <div className="flex-1 flex flex-col h-full relative">
-            {/* O fundo desenhado fica atrás de tudo absoluto */}
             <div className="absolute inset-0 z-0 bg-[url('https://i.pinimg.com/originals/8c/98/99/8c98994518b575bfd8c949e91d20548b.jpg')] bg-cover bg-center opacity-[0.15]"></div>
 
             {telefoneAtivo ? (
@@ -345,7 +398,10 @@ function App() {
                       <div className={`p-3 rounded-lg shadow-sm max-w-[80%] relative ${
                         msg.direcao === 'enviada' ? 'bg-[#dcf8c6] rounded-tr-none' : 'bg-white rounded-tl-none border border-gray-100'
                       }`}>
-                        <p className="text-gray-800 text-[15px]">{msg.texto_mensagem}</p>
+                        
+                        {/* AQUI A MÁGICA ACONTECE: Chama a função que transforma o código na imagem */}
+                        {renderizarBolhaMensagem(msg.texto_mensagem)}
+                        
                         <div className="flex justify-end items-center gap-1 mt-1">
                           <span className="text-[10px] text-gray-500">
                             {new Date(msg.criado_em).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
