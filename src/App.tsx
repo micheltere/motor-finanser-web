@@ -194,7 +194,7 @@ function App() {
     .filter(msg => msg.telefone_cliente === telefoneAtivo)
     .sort((a, b) => new Date(a.criado_em).getTime() - new Date(b.criado_em).getTime());
 
-// === FUNÇÕES AUXILIARES PARA FORMATAR MÍDIAS E TEMPLATES ===
+  // === FUNÇÕES AUXILIARES PARA FORMATAR MÍDIAS E TEMPLATES ===
   
   // Limpa o texto da barra lateral
   const formatarResumoSidebar = (texto: string) => {
@@ -247,10 +247,7 @@ function App() {
     
     // 3. ✨ NOVO: Tratamento para TEMPLATES (Lê da memória e exibe)
     if (texto.startsWith('[Template: ')) {
-      // Extrai o nome limpo do template. Ex: "vencimento_proximo_v3"
       const nomeTemplate = texto.replace('[Template: ', '').replace(']', '').trim();
-      
-      // Procura o texto real dele na lista que a Meta enviou
       const templateEncontrado = templatesMeta.find(t => t.id === nomeTemplate);
 
       if (templateEncontrado && templateEncontrado.corpo) {
@@ -266,36 +263,10 @@ function App() {
         );
       }
       
-      // Fallback caso o template não esteja mais na memória
       return <p className="text-gray-800 text-[15px] italic text-gray-600">📢 Disparo: {nomeTemplate}</p>;
     }
     
     // 4. Se for texto normal digitado, só retorna o texto
-    return <p className="text-gray-800 text-[15px] whitespace-pre-wrap">{texto}</p>;
-  };
-    
-    // Tratamento para PDFs / DOCUMENTOS
-    if (texto.startsWith('[DOCUMENTO|')) {
-      const partes = texto.split('|');
-      const mediaId = partes[1];
-      const nomeArquivo = partes[2] ? partes[2].replace(']', '') : 'Documento';
-      
-      const urlDoc = `https://motor-finanser-api.onrender.com/api/media/${mediaId}`;
-
-      return (
-        <a 
-          href={urlDoc} 
-          target="_blank" 
-          rel="noopener noreferrer" 
-          className="flex items-center gap-2 p-3 bg-white/60 border border-gray-200 rounded-lg text-blue-600 hover:text-blue-800 hover:bg-white transition-colors"
-        >
-          <span className="text-xl">📄</span>
-          <span className="text-sm font-semibold truncate max-w-[200px]">{nomeArquivo}</span>
-        </a>
-      );
-    }
-    
-    // Se for texto normal, só retorna o texto
     return <p className="text-gray-800 text-[15px] whitespace-pre-wrap">{texto}</p>;
   };
 
@@ -352,7 +323,6 @@ function App() {
                   }`}
                 >
                   <h3 className="font-semibold text-gray-800 text-sm">{contato.telefone_cliente}</h3>
-                  {/* Aplica a função de resumo para ficar bonito na barra lateral */}
                   <p className="text-xs text-gray-500 truncate mt-1">
                     {formatarResumoSidebar(contato.texto_mensagem)}
                   </p>
@@ -402,7 +372,6 @@ function App() {
                    {templatesMeta.map(tpl => <option key={tpl.id} value={tpl.id}>{tpl.nome}</option>)}
                  </select>
 
-{/* ✨ NOVO: CAIXA DE PRÉ-VISUALIZAÇÃO DO TEMPLATE */}
                  {templateSelecionado && templateSelecionado.id !== 'selecione' && templateSelecionado.corpo && (
                    <div className="bg-[#dcf8c6] p-5 rounded-xl border border-green-200/50 mb-6 relative shadow-sm max-w-[85%]">
                      <span className="absolute top-2 right-3 text-[10px] font-bold text-green-600/70 uppercase tracking-wider">
@@ -455,7 +424,6 @@ function App() {
                         msg.direcao === 'enviada' ? 'bg-[#dcf8c6] rounded-tr-none' : 'bg-white rounded-tl-none border border-gray-100'
                       }`}>
                         
-                        {/* AQUI A MÁGICA ACONTECE: Chama a função que transforma o código na imagem */}
                         {renderizarBolhaMensagem(msg.texto_mensagem)}
                         
                         <div className="flex justify-end items-center gap-1 mt-1">
