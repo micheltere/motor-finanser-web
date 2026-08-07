@@ -108,28 +108,39 @@ function App() {
         if (!colunaMapeada) return '';
 
         const dadoBruto = linha[colunaMapeada];
+        let valorTratado = '';
 
-        if (dadoBruto instanceof Date) {
+        if (typeof dadoBruto === 'number' && dadoBruto > 20000) {
+          const dataExcel = new Date(Math.round((dadoBruto - 25569) * 86400 * 1000));
+          const dia = String(dataExcel.getUTCDate()).padStart(2, '0');
+          const mes = String(dataExcel.getUTCMonth() + 1).padStart(2, '0'); 
+          const ano = dataExcel.getUTCFullYear();
+          valorTratado = `${dia}/${mes}/${ano}`;
+        }
+        else if (dadoBruto instanceof Date) {
           const dia = String(dadoBruto.getUTCDate()).padStart(2, '0');
           const mes = String(dadoBruto.getUTCMonth() + 1).padStart(2, '0'); 
           const ano = dadoBruto.getUTCFullYear();
-          return `${dia}/${mes}/${ano}`;
+          valorTratado = `${dia}/${mes}/${ano}`;
         }
-
-        let valorTexto = String(dadoBruto || '').trim();
-
-        if (valorTexto.includes('/')) {
-          const partes = valorTexto.split('/');
-          if (partes.length === 3) {
-            let [p1, p2, p3] = partes;
-            let dia = p1.padStart(2, '0');
-            let mes = p2.padStart(2, '0'); 
-            let ano = p3;
-            if (ano.length === 2) ano = `20${ano}`;
-            return `${dia}/${mes}/${ano}`;
+        else {
+          let valorTexto = String(dadoBruto || '').trim();
+          if (valorTexto.includes('/')) {
+            const partes = valorTexto.split('/');
+            if (partes.length === 3) {
+              let ano = partes[2];
+              if (ano.length === 2) ano = `20${ano}`;
+              valorTratado = `${partes[0].padStart(2, '0')}/${partes[1].padStart(2, '0')}/${ano}`;
+            } else if (partes.length === 2) {
+              valorTratado = `${partes[0].padStart(2, '0')}/${partes[1].padStart(2, '0')}/${new Date().getFullYear()}`;
+            } else {
+              valorTratado = valorTexto;
+            }
+          } else {
+            valorTratado = valorTexto;
           }
         }
-        return valorTexto;
+        return valorTratado;
       });
 
       let telefoneLimpo = String(linha[colunaTelefoneSelecionada] || '').replace(/\D/g, '');
@@ -158,8 +169,9 @@ function App() {
     }
   };
 
-  const enviarMensagemManual = async (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && mensagemDigitada.trim() !== '' && telefoneAtivo) {
+  // ✨ NOVA FUNÇÃO SEPARADA: Inteligência de disparo focada
+  const dispararMensagemManual = async () => {
+    if (mensagemDigitada.trim() !== '' && telefoneAtivo) {
       setEnviandoMensagem(true);
       try {
         const urlMotor = 'https://motor-finanser-api.onrender.com/api/send-message';
@@ -184,6 +196,13 @@ function App() {
     }
   };
 
+  // Escutador do botão Enter (que agora chama a função acima)
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      dispararMensagemManual();
+    }
+  };
+
   const contatosUnicos = conversas.reduce((acc, msg) => {
     if (!acc[msg.telefone_cliente]) acc[msg.telefone_cliente] = msg; 
     return acc;
@@ -199,7 +218,7 @@ function App() {
     if (!texto) return '';
     if (texto.startsWith('[IMAGEM|')) return '📷 Imagem';
     if (texto.startsWith('[DOCUMENTO|')) return '📄 Documento';
-    if (texto.startsWith('[AUDIO|')) return '🎵 Áudio'; // ✨ NOVO
+    if (texto.startsWith('[AUDIO|')) return '🎵 Áudio';
     
     if (texto.startsWith('[Template: ')) {
       const nomeTemplate = texto.replace('[Template: ', '').replace(/\]$/, '').split(' | ')[0].trim();
@@ -239,15 +258,13 @@ function App() {
         </a>
       );
     }
-    
-// ✨ NOVO: Tratamento para ÁUDIOS
+
     if (texto.startsWith('[AUDIO|')) {
       const mediaId = texto.replace('[AUDIO|', '').replace(']', '').trim();
       const urlAudio = `https://motor-finanser-api.onrender.com/api/media/${mediaId}`;
 
       return (
         <div className="flex items-center gap-2 min-w-[200px] md:min-w-[250px] py-1">
-          {/* A tag <audio> do HTML5 já cria o player bonitão automaticamente */}
           <audio controls className="w-full h-10 rounded-full bg-gray-50">
             <source src={urlAudio} />
             Seu navegador não suporta áudio.
@@ -255,8 +272,7 @@ function App() {
         </div>
       );
     }
-
-    // Tratamento para TEMPLATES com Variáveis
+    
     if (texto.startsWith('[Template: ')) {
       const conteudoStr = texto.replace('[Template: ', '').replace(/\]$/, '').trim();
       const partes = conteudoStr.split(' | ');
@@ -291,12 +307,12 @@ function App() {
       return <p className="text-gray-800 text-[15px] italic text-gray-600">📢 Disparo: {nomeTemplate}</p>;
     }
     
-    // Fallback para texto normal
     return <p className="text-gray-800 text-[15px] whitespace-pre-wrap">{texto}</p>;
   };
 
+  // ✨ CORREÇÃO 1: h-[100dvh] aplicado no container principal para resolver vazamento no mobile!
   return (
-    <div className="flex h-screen bg-gray-50 font-sans text-gray-800 overflow-hidden">
+    <div className="flex h-[100dvh] bg-gray-50 font-sans text-gray-800 overflow-hidden">
       
       <div className={`bg-[#0b141a] flex-col items-center py-6 justify-between z-20 shadow-xl transition-all ${
         telefoneAtivo && abaAtiva === 'chat' ? 'hidden md:flex w-[70px]' : 'flex w-[70px]'
@@ -439,7 +455,7 @@ function App() {
             {telefoneAtivo ? (
               <div className="flex-1 flex flex-col z-10 w-full h-full bg-white/40 backdrop-blur-sm">
                 
-                <div className="h-16 bg-white flex items-center px-4 md:px-6 shadow-sm sticky top-0 z-20">
+                <div className="h-16 bg-white flex items-center px-4 md:px-6 shadow-sm sticky top-0 z-20 flex-shrink-0">
                   <button 
                     onClick={() => setTelefoneAtivo(null)} 
                     className="md:hidden mr-3 p-2 bg-gray-100 rounded-full text-gray-600 hover:bg-gray-200 transition-colors"
@@ -479,17 +495,29 @@ function App() {
                   ))}
                 </div>
 
-                <div className="p-3 md:p-4 bg-[#f0f2f5] border-t sticky bottom-0">
+                {/* ✨ CORREÇÃO 2: Novo layout da barra de digitação com o botão de Enviar (Aviãozinho) */}
+                <div className="p-3 md:p-4 bg-[#f0f2f5] border-t flex items-center gap-2 flex-shrink-0">
                   <input 
                     type="text" 
                     placeholder={enviandoMensagem ? "Enviando..." : "Digite uma mensagem..."} 
-                    className="w-full py-3 px-5 rounded-full bg-white border-0 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-gray-700"
+                    className="flex-1 py-3 px-5 rounded-full bg-white border-0 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-gray-700"
                     value={mensagemDigitada}
                     onChange={(e) => setMensagemDigitada(e.target.value)}
-                    onKeyDown={enviarMensagemManual}
+                    onKeyDown={handleKeyDown}
                     disabled={enviandoMensagem}
                   />
+                  
+                  {mensagemDigitada.trim() !== '' && (
+                    <button 
+                      onClick={dispararMensagemManual}
+                      disabled={enviandoMensagem}
+                      className="w-12 h-12 flex-shrink-0 bg-blue-600 rounded-full flex items-center justify-center text-white hover:bg-blue-700 transition-colors shadow-sm"
+                    >
+                      <Send size={20} className="md:ml-1" />
+                    </button>
+                  )}
                 </div>
+
               </div>
             ) : (
               <div className="flex-1 flex items-center justify-center z-10 w-full h-full bg-white/30 backdrop-blur-[2px]">
