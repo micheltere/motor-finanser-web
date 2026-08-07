@@ -140,7 +140,10 @@ function App() {
             valorTratado = valorTexto;
           }
         }
-        return valorTratado;
+        
+        // ✨ NOVO: Limpa as chaves (ex: "{{responsavel}}" vira "responsavel") e envia o objeto completo
+        const nomeLimpo = varName.replace(/[{}]/g, '').trim();
+        return { name: nomeLimpo, text: valorTratado };
       });
 
       let telefoneLimpo = String(linha[colunaTelefoneSelecionada] || '').replace(/\D/g, '');
@@ -148,7 +151,6 @@ function App() {
 
       return { id: `msg_${Date.now()}_${index}`, phone: telefoneLimpo, templateName: templateSelecionado.id, variables: variaveisDinamicas };
     }).filter(msg => msg.phone !== '');
-
     try {
       const urlMotor = 'https://motor-finanser-api.onrender.com/api/send-bulk'; 
       const resposta = await fetch(urlMotor, {
