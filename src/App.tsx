@@ -479,9 +479,22 @@ function App() {
                         {renderizarBolhaMensagem(msg.texto_mensagem)}
                         
                         <div className="flex justify-end items-center gap-1 mt-1">
-                          <span className="text-[10px] text-gray-500">
-                            {new Date(msg.criado_em).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </span>
+                          <span className="text-[10px] text-gray-500 font-medium">
+    {/* Função "in-line" que formata a data elegantemente */}
+    {(() => {
+      const dataMsg = new Date(msg.criado_em);
+      const hoje = new Date();
+      
+      const isHoje = dataMsg.getDate() === hoje.getDate() &&
+                     dataMsg.getMonth() === hoje.getMonth() &&
+                     dataMsg.getFullYear() === hoje.getFullYear();
+                     
+      const hora = dataMsg.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      
+      // Se for hoje, mostra só a hora. Se for antigo, mostra a data e a hora.
+      return isHoje ? hora : `${dataMsg.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit'})} às ${hora}`;
+    })()}
+  </span>
                           {msg.direcao === 'enviada' && (
                             <span className="text-[12px] ml-1">
                               {msg.status === 'sent' && <span className="text-gray-400">✓</span>}
