@@ -199,6 +199,7 @@ function App() {
     if (!texto) return '';
     if (texto.startsWith('[IMAGEM|')) return '📷 Imagem';
     if (texto.startsWith('[DOCUMENTO|')) return '📄 Documento';
+    if (texto.startsWith('[AUDIO|')) return '🎵 Áudio'; // ✨ NOVO
     
     if (texto.startsWith('[Template: ')) {
       const nomeTemplate = texto.replace('[Template: ', '').replace(/\]$/, '').split(' | ')[0].trim();
@@ -239,6 +240,22 @@ function App() {
       );
     }
     
+// ✨ NOVO: Tratamento para ÁUDIOS
+    if (texto.startsWith('[AUDIO|')) {
+      const mediaId = texto.replace('[AUDIO|', '').replace(']', '').trim();
+      const urlAudio = `https://motor-finanser-api.onrender.com/api/media/${mediaId}`;
+
+      return (
+        <div className="flex items-center gap-2 min-w-[200px] md:min-w-[250px] py-1">
+          {/* A tag <audio> do HTML5 já cria o player bonitão automaticamente */}
+          <audio controls className="w-full h-10 rounded-full bg-gray-50">
+            <source src={urlAudio} />
+            Seu navegador não suporta áudio.
+          </audio>
+        </div>
+      );
+    }
+
     // Tratamento para TEMPLATES com Variáveis
     if (texto.startsWith('[Template: ')) {
       const conteudoStr = texto.replace('[Template: ', '').replace(/\]$/, '').trim();
