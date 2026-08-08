@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { ChangeEvent } from 'react';
 import * as xlsx from 'xlsx';
 import { supabase } from './supabase';
 import Login from './login';
-import { MessageSquare, Send, Lock, ArrowLeft } from 'lucide-react'; 
+import { MessageSquare, Send, Lock, ArrowLeft, Paperclip } from 'lucide-react'; 
 
 function App() {
   const [autenticado, setAutenticado] = useState<boolean>(() => {
@@ -37,6 +37,9 @@ function App() {
 
   const [mensagemDigitada, setMensagemDigitada] = useState('');
   const [enviandoMensagem, setEnviandoMensagem] = useState(false);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [enviandoMidia, setEnviandoMidia] = useState(false);
 
   if (!autenticado) {
     return <Login onLogin={fazerLogin} />;
@@ -77,9 +80,9 @@ function App() {
     const leitor = new FileReader();
     leitor.onload = (e) => {
       const arrayBuffer = e.target?.result;
-      const workbook = xlsx.read(arrayBuffer, { type: 'array', cellDates: true });
+      const workbook = xlsx.read(arrayBuffer, { type: 'array' });
       const aba = workbook.Sheets[workbook.SheetNames[0]];
-      const dadosBrutos = xlsx.utils.sheet_to_json(aba, { raw: false, dateNF: 'yyyy-mm-dd' });
+      const dadosBrutos = xlsx.utils.sheet_to_json(aba, { raw: true });
       
       const dadosFormatados = dadosBrutos.map((linha: any) => linha);
       
@@ -105,7 +108,10 @@ function App() {
     const pacoteMensagens = dadosPlanilha.map((linha, index) => {
       const variaveisDinamicas = templateSelecionado.variaveis.map((varName: string) => {
         const colunaMapeada = mapeamento[varName];
-        if (!colunaMapeada) return '';
+        
+        // ✨ CORREÇÃO DE SEGURANÇA: Retorna o objeto vazio se a coluna não for mapeada
+        const nomeLimpo = varName.replace(/[{}]/g, '').trim();
+        if (!colunaMapeada) return { name: nomeLimpo, text: '' };
 
         const dadoBruto = linha[colunaMapeada];
         let valorTratado = '';
@@ -141,8 +147,6 @@ function App() {
           }
         }
         
-        // ✨ NOVO: Limpa as chaves (ex: "{{responsavel}}" vira "responsavel") e envia o objeto completo
-        const nomeLimpo = varName.replace(/[{}]/g, '').trim();
         return { name: nomeLimpo, text: valorTratado };
       });
 
@@ -151,6 +155,7 @@ function App() {
 
       return { id: `msg_${Date.now()}_${index}`, phone: telefoneLimpo, templateName: templateSelecionado.id, variables: variaveisDinamicas };
     }).filter(msg => msg.phone !== '');
+
     try {
       const urlMotor = 'https://motor-finanser-api.onrender.com/api/send-bulk'; 
       const resposta = await fetch(urlMotor, {
@@ -171,7 +176,6 @@ function App() {
     }
   };
 
-  // ✨ NOVA FUNÇÃO SEPARADA: Inteligência de disparo focada
   const dispararMensagemManual = async () => {
     if (mensagemDigitada.trim() !== '' && telefoneAtivo) {
       setEnviandoMensagem(true);
@@ -198,7 +202,55 @@ function App() {
     }
   };
 
-  // Escutador do botão Enter (que agora chama a função acima)
+  const lidarComBotaoAnexo = () => {
+    fileInputRef.current?.click(); 
+  };
+
+  const lidarComEnvioAnexo = async (evento: ChangeEvent<HTMLInputElement>) => {
+    const arquivo = evento.target.files?.[0];
+    if (!arquivo || !telefoneAtivo) return;
+
+    if (arquivo.size > 15 * 1024 * 1024) {
+      alert('⚠️ O arquivo é muito grande. O limite máximo é de 15MB.');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    setEnviandoMidia(true);
+
+    const leitor = new FileReader();
+    leitor.readAsDataURL(arquivo);
+    leitor.onload = async () => {
+      const base64 = leitor.result as string;
+
+      try {
+        const urlMotor = 'https://motor-finanser-api.onrender.com/api/send-media';
+        const resposta = await fetch(urlMotor, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            phone: telefoneAtivo, 
+            base64: base64, 
+            fileName: arquivo.name,
+            mimeType: arquivo.type
+          })
+        });
+
+        if (resposta.ok) {
+          const { data } = await supabase.from('mensagens').select('*').order('criado_em', { ascending: false });
+          if (data) setConversas(data);
+        } else {
+          alert('❌ A Meta bloqueou o envio deste arquivo ou o formato não é suportado.');
+        }
+      } catch (err) {
+        alert('❌ Erro de conexão com o Motor ao enviar arquivo.');
+      } finally {
+        setEnviandoMidia(false);
+        if (fileInputRef.current) fileInputRef.current.value = ''; 
+      }
+    };
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       dispararMensagemManual();
@@ -215,12 +267,12 @@ function App() {
     .filter(msg => msg.telefone_cliente === telefoneAtivo)
     .sort((a, b) => new Date(a.criado_em).getTime() - new Date(b.criado_em).getTime());
 
-  // === FUNÇÕES AUXILIARES PARA FORMATAR MÍDIAS E TEMPLATES ===
   const formatarResumoSidebar = (texto: string) => {
     if (!texto) return '';
     if (texto.startsWith('[IMAGEM|')) return '📷 Imagem';
     if (texto.startsWith('[DOCUMENTO|')) return '📄 Documento';
     if (texto.startsWith('[AUDIO|')) return '🎵 Áudio';
+    if (texto.startsWith('[Reação:')) return '👍 Reagiu à mensagem';
     
     if (texto.startsWith('[Template: ')) {
       const nomeTemplate = texto.replace('[Template: ', '').replace(/\]$/, '').split(' | ')[0].trim();
@@ -274,6 +326,11 @@ function App() {
         </div>
       );
     }
+
+    if (texto.startsWith('[Reação:')) {
+      const emoji = texto.replace('[Reação: ', '').replace(']', '').trim();
+      return <p className="text-gray-800 text-[24px]">{emoji}</p>;
+    }
     
     if (texto.startsWith('[Template: ')) {
       const conteudoStr = texto.replace('[Template: ', '').replace(/\]$/, '').trim();
@@ -287,10 +344,10 @@ function App() {
       if (templateEncontrado && templateEncontrado.corpo) {
         let corpoFormatado = templateEncontrado.corpo;
         
-        if (variaveisSalvas.length > 0) {
-          variaveisSalvas.forEach((valorDaVariavel, index) => {
-            const tag = new RegExp(`\\{\\{${index + 1}\\}\\}`, 'g');
-            corpoFormatado = corpoFormatado.replace(tag, valorDaVariavel);
+        if (templateEncontrado.variaveis && templateEncontrado.variaveis.length > 0) {
+          templateEncontrado.variaveis.forEach((nomeTagExata: string, index: number) => {
+            const valorDaVariavel = variaveisSalvas[index] !== undefined ? variaveisSalvas[index] : '';
+            corpoFormatado = corpoFormatado.split(nomeTagExata).join(valorDaVariavel);
           });
         }
 
@@ -312,7 +369,6 @@ function App() {
     return <p className="text-gray-800 text-[15px] whitespace-pre-wrap">{texto}</p>;
   };
 
-  // ✨ CORREÇÃO 1: h-[100dvh] aplicado no container principal para resolver vazamento no mobile!
   return (
     <div className="flex h-[100dvh] bg-gray-50 font-sans text-gray-800 overflow-hidden">
       
@@ -452,7 +508,7 @@ function App() {
            </div>
         ) : (
           <div className="flex-1 flex flex-col h-full relative">
-            <div className="absolute inset-0 z-0 bg-[url('https://i.pinimg.com/originals/8c/98/99/8c98994518b575bfd8c949e91d20548b.jpg')] bg-cover bg-center opacity-[0.15]"></div>
+            <div className="absolute inset-0 z-0 bg-[url('/bg-chat.jpg')] bg-cover bg-center opacity-[0.15]"></div>
 
             {telefoneAtivo ? (
               <div className="flex-1 flex flex-col z-10 w-full h-full bg-white/40 backdrop-blur-sm">
@@ -482,21 +538,19 @@ function App() {
                         
                         <div className="flex justify-end items-center gap-1 mt-1">
                           <span className="text-[10px] text-gray-500 font-medium">
-    {/* Função "in-line" que formata a data elegantemente */}
-    {(() => {
-      const dataMsg = new Date(msg.criado_em);
-      const hoje = new Date();
-      
-      const isHoje = dataMsg.getDate() === hoje.getDate() &&
-                     dataMsg.getMonth() === hoje.getMonth() &&
-                     dataMsg.getFullYear() === hoje.getFullYear();
-                     
-      const hora = dataMsg.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      
-      // Se for hoje, mostra só a hora. Se for antigo, mostra a data e a hora.
-      return isHoje ? hora : `${dataMsg.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit'})} às ${hora}`;
-    })()}
-  </span>
+                            {(() => {
+                              const dataMsg = new Date(msg.criado_em);
+                              const hoje = new Date();
+                              
+                              const isHoje = dataMsg.getDate() === hoje.getDate() &&
+                                             dataMsg.getMonth() === hoje.getMonth() &&
+                                             dataMsg.getFullYear() === hoje.getFullYear();
+                                             
+                              const hora = dataMsg.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                              
+                              return isHoje ? hora : `${dataMsg.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit'})} às ${hora}`;
+                            })()}
+                          </span>
                           {msg.direcao === 'enviada' && (
                             <span className="text-[12px] ml-1">
                               {msg.status === 'sent' && <span className="text-gray-400">✓</span>}
@@ -510,23 +564,39 @@ function App() {
                   ))}
                 </div>
 
-                {/* ✨ CORREÇÃO 2: Novo layout da barra de digitação com o botão de Enviar (Aviãozinho) */}
                 <div className="p-3 md:p-4 bg-[#f0f2f5] border-t flex items-center gap-2 flex-shrink-0">
                   <input 
+                    type="file" 
+                    className="hidden" 
+                    ref={fileInputRef} 
+                    onChange={lidarComEnvioAnexo} 
+                    accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx"
+                  />
+                  
+                  <button 
+                    onClick={lidarComBotaoAnexo}
+                    disabled={enviandoMensagem || enviandoMidia}
+                    className="w-12 h-12 flex-shrink-0 bg-white rounded-full flex items-center justify-center text-gray-500 hover:text-blue-600 transition-colors shadow-sm disabled:opacity-50"
+                    title="Enviar anexo"
+                  >
+                    <Paperclip size={20} />
+                  </button>
+
+                  <input 
                     type="text" 
-                    placeholder={enviandoMensagem ? "Enviando..." : "Digite uma mensagem..."} 
-                    className="flex-1 py-3 px-5 rounded-full bg-white border-0 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-gray-700"
+                    placeholder={enviandoMidia ? "Enviando arquivo..." : (enviandoMensagem ? "Enviando..." : "Digite uma mensagem...")} 
+                    className="flex-1 py-3 px-5 rounded-full bg-white border-0 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-gray-700 disabled:opacity-70 disabled:bg-gray-100"
                     value={mensagemDigitada}
                     onChange={(e) => setMensagemDigitada(e.target.value)}
                     onKeyDown={handleKeyDown}
-                    disabled={enviandoMensagem}
+                    disabled={enviandoMensagem || enviandoMidia}
                   />
                   
                   {mensagemDigitada.trim() !== '' && (
                     <button 
                       onClick={dispararMensagemManual}
-                      disabled={enviandoMensagem}
-                      className="w-12 h-12 flex-shrink-0 bg-blue-600 rounded-full flex items-center justify-center text-white hover:bg-blue-700 transition-colors shadow-sm"
+                      disabled={enviandoMensagem || enviandoMidia}
+                      className="w-12 h-12 flex-shrink-0 bg-blue-600 rounded-full flex items-center justify-center text-white hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50"
                     >
                       <Send size={20} className="md:ml-1" />
                     </button>
