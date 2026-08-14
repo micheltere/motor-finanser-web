@@ -26,16 +26,6 @@ function App() {
   const [conversas, setConversas] = useState<any[]>([]);
   const [telefoneAtivo, setTelefoneAtivo] = useState<string | null>(null);
 
-  // Armazena no navegador a hora em que cada contato foi visto/aberto
-  const [contatosVistos, setContatosVistos] = useState<Record<string, number>>(() => {
-    try {
-      const salvo = localStorage.getItem('finanser_vistos');
-      return salvo ? JSON.parse(salvo) : {};
-    } catch {
-      return {};
-    }
-  });
-
   const [colunasExcel, setColunasExcel] = useState<string[]>([]);
   const [dadosPlanilha, setDadosPlanilha] = useState<any[]>([]);
   const [templatesMeta, setTemplatesMeta] = useState<any[]>([{ id: 'selecione', nome: '🔄 Carregando...', variaveis: [] }]);
@@ -46,16 +36,39 @@ function App() {
 
   const [mensagemDigitada, setMensagemDigitada] = useState('');
   const [enviandoMensagem, setEnviandoMensagem] = useState(false);
-
-  // Estado para a Barra de Busca
   const [termoBusca, setTermoBusca] = useState('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [enviandoMidia, setEnviandoMidia] = useState(false);
 
+  const ultimaMsgRef = useRef<string | null>(null);
+
   if (!autenticado) {
     return <Login onLogin={fazerLogin} />;
   }
+
+  useEffect(() => {
+    if (Notification.permission !== 'granted' && Notification.permission !== 'denied') {
+      Notification.requestPermission();
+    }
+  }, []);
+
+  const dispararAlerta = (msg: any) => {
+    try {
+      const audio = new Audio('/notificacao.mp3');
+      audio.play().catch(() => {});
+
+      if (Notification.permission === 'granted') {
+        const resumo = msg.texto_mensagem.replace(/\[.*?\]/g, '📎 Mídia/Anexo');
+        new Notification(`Nova mensagem de ${msg.telefone_cliente}`, {
+          body: resumo,
+          icon: '/favicon.ico'
+        });
+      }
+    } catch (err) {
+      console.error('Erro na notificação:', err);
+    }
+  };
 
   useEffect(() => {
     const buscarMensagens = async () => {
@@ -66,7 +79,39 @@ function App() {
         .limit(5000);
 
       if (!error && data) {
+        
+        // ✨ NOVO: Auto-leitura (Sincronização com o Banco de Dados)
+        // Se houver mensagens não lidas do cliente que já está com o chat aberto na nossa cara,
+        // nós avisamos ao Supabase que já lemos, para não notificar a equipe.
+        const naoLidasAtivas = data.filter(m =>
+          m.telefone_cliente === telefoneAtivo &&
+          m.direcao === 'recebida' &&
+          m.status !== 'read'
+        );
+
+        if (naoLidasAtivas.length > 0) {
+          await supabase
+            .from('mensagens')
+            .update({ status: 'read' })
+            .eq('telefone_cliente', telefoneAtivo)
+            .eq('direcao', 'recebida')
+            .is('status', null);
+            
+          naoLidasAtivas.forEach(m => m.status = 'read'); // Atualiza na memória local
+        }
+
         setConversas(data);
+
+        const msgsRecebidas = data.filter(m => m.direcao === 'recebida');
+        if (msgsRecebidas.length > 0) {
+          const idMaisRecente = msgsRecebidas[0].id;
+          if (ultimaMsgRef.current && ultimaMsgRef.current !== idMaisRecente) {
+            if (msgsRecebidas[0].telefone_cliente !== telefoneAtivo) {
+              dispararAlerta(msgsRecebidas[0]);
+            }
+          }
+          ultimaMsgRef.current = idMaisRecente;
+        }
       }
     };
 
@@ -90,16 +135,29 @@ function App() {
 
     const intervalo = setInterval(buscarMensagens, 5000);
     return () => clearInterval(intervalo);
-  }, []);
+  }, [telefoneAtivo]); 
 
-  // Marca as mensagens do contato como lidas ao abrir a conversa
-  const abrirContato = (telefone: string) => {
+  // ✨ CORREÇÃO GLOBAL: Ao abrir a conversa, marca como "read" no Banco de Dados.
+  // Assim, se o Financeiro abrir a conversa, a bolinha apaga no computador da Diretoria também!
+  const abrirContato = async (telefone: string) => {
     setTelefoneAtivo(telefone);
-    setContatosVistos(prev => {
-      const novoEstado = { ...prev, [telefone]: Date.now() };
-      localStorage.setItem('finanser_vistos', JSON.stringify(novoEstado));
-      return novoEstado;
-    });
+
+    const naoLidas = conversas.filter(m => m.telefone_cliente === telefone && m.direcao === 'recebida' && m.status !== 'read');
+
+    if (naoLidas.length > 0) {
+      // 1. Apaga a notificação localmente na mesma hora (para ser instantâneo)
+      setConversas(prev => prev.map(m => 
+        (m.telefone_cliente === telefone && m.direcao === 'recebida') ? { ...m, status: 'read' } : m
+      ));
+
+      // 2. Avisa ao Supabase para apagar no computador dos outros usuários
+      await supabase
+        .from('mensagens')
+        .update({ status: 'read' })
+        .eq('telefone_cliente', telefone)
+        .eq('direcao', 'recebida')
+        .is('status', null);
+    }
   };
 
   const lidarComArquivo = (evento: ChangeEvent<HTMLInputElement>) => {
@@ -284,14 +342,12 @@ function App() {
     }
   };
 
-  // Agrupa mensagens pelo número do cliente
   const contatosUnicos = conversas.reduce((acc, msg) => {
     if (!acc[msg.telefone_cliente]) acc[msg.telefone_cliente] = msg; 
     return acc;
   }, {});
   const listaContatos: any[] = Object.values(contatosUnicos);
 
-  // Filtro de Busca (Lupa no topo)
   const listaContatosFiltrados = listaContatos.filter((contato) => {
     if (termoBusca.trim() === '') return true; 
 
@@ -306,19 +362,11 @@ function App() {
     return temMensagemComTermo;
   });
 
-  // Calcula mensagens não lidas por contato
+  // ✨ CORREÇÃO 2: Agora lê diretamente do banco de dados (ignorando o navegador)
   const calcularNaoLidas = (telefone: string) => {
     if (telefoneAtivo === telefone) return 0;
     const msgsContato = conversas.filter(m => m.telefone_cliente === telefone);
-    if (msgsContato.length === 0) return 0;
-
-    const vinteQuatroHorasAtras = Date.now() - (24 * 60 * 60 * 1000);
-    const ultimaVistasTime = contatosVistos[telefone] || vinteQuatroHorasAtras;
-    
-    const pendentes = msgsContato.filter(m => {
-      const timeMsg = new Date(m.criado_em).getTime();
-      return m.direcao === 'recebida' && timeMsg > ultimaVistasTime;
-    });
+    const pendentes = msgsContato.filter(m => m.direcao === 'recebida' && m.status !== 'read');
     return pendentes.length;
   };
 
@@ -435,7 +483,6 @@ function App() {
   return (
     <div className="flex h-[100dvh] bg-gray-50 font-sans text-gray-800 overflow-hidden">
       
-      {/* 1. BARRA LATERAL ESQUERDA */}
       <div className={`bg-[#0b141a] flex-col items-center py-6 justify-between z-20 shadow-xl transition-all ${
         telefoneAtivo && abaAtiva === 'chat' ? 'hidden md:flex w-[70px]' : 'flex w-[70px]'
       }`}>
@@ -473,7 +520,6 @@ function App() {
         </button>
       </div>
 
-      {/* 2. PAINEL DE CONTATOS (COM BARRA DE BUSCA E NOTIFICAÇÕES) */}
       <div className={`bg-white border-r border-gray-200 flex-col z-10 shadow-sm ${
         abaAtiva === 'disparo' ? 'hidden md:flex md:w-[320px]' : (telefoneAtivo && abaAtiva === 'chat' ? 'hidden md:flex md:w-[320px]' : 'flex flex-1 md:w-[320px] md:flex-none')
       }`}>
@@ -488,7 +534,6 @@ function App() {
               )}
             </div>
 
-            {/* BARRA DE PESQUISA */}
             <div className="p-3 border-b border-gray-100 flex-shrink-0 bg-white">
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -527,7 +572,6 @@ function App() {
                         </p>
                       </div>
 
-                      {/* BOLINHA VERDE DE NOTIFICAÇÃO */}
                       {numNaoLidas > 0 && (
                         <span className="bg-green-500 text-white font-bold text-xs w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 animate-pulse">
                           {numNaoLidas}
@@ -554,7 +598,6 @@ function App() {
         )}
       </div>
 
-      {/* 3. TELA DE CHAT PRINCIPAL */}
       <div className={`bg-gray-50 relative overflow-hidden flex-1 ${
         abaAtiva === 'chat' && !telefoneAtivo ? 'hidden md:flex flex-col' : 'flex flex-col'
       }`}>
