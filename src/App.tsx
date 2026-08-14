@@ -3,7 +3,7 @@ import type { ChangeEvent } from 'react';
 import * as xlsx from 'xlsx';
 import { supabase } from './supabase';
 import Login from './login';
-import { MessageSquare, Send, Lock, ArrowLeft, Paperclip } from 'lucide-react'; 
+import { MessageSquare, Send, Lock, ArrowLeft, Paperclip, Search } from 'lucide-react'; 
 
 function App() {
   const [autenticado, setAutenticado] = useState<boolean>(() => {
@@ -23,9 +23,18 @@ function App() {
   };
 
   const [abaAtiva, setAbaAtiva] = useState<'disparo' | 'chat'>('chat');
-  
   const [conversas, setConversas] = useState<any[]>([]);
   const [telefoneAtivo, setTelefoneAtivo] = useState<string | null>(null);
+
+  // Armazena no navegador a hora em que cada contato foi visto/aberto
+  const [contatosVistos, setContatosVistos] = useState<Record<string, number>>(() => {
+    try {
+      const salvo = localStorage.getItem('finanser_vistos');
+      return salvo ? JSON.parse(salvo) : {};
+    } catch {
+      return {};
+    }
+  });
 
   const [colunasExcel, setColunasExcel] = useState<string[]>([]);
   const [dadosPlanilha, setDadosPlanilha] = useState<any[]>([]);
@@ -38,6 +47,9 @@ function App() {
   const [mensagemDigitada, setMensagemDigitada] = useState('');
   const [enviandoMensagem, setEnviandoMensagem] = useState(false);
 
+  // Estado para a Barra de Busca
+  const [termoBusca, setTermoBusca] = useState('');
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [enviandoMidia, setEnviandoMidia] = useState(false);
 
@@ -47,8 +59,15 @@ function App() {
 
   useEffect(() => {
     const buscarMensagens = async () => {
-      const { data, error } = await supabase.from('mensagens').select('*').order('criado_em', { ascending: false });
-      if (!error) setConversas(data || []);
+      const { data, error } = await supabase
+        .from('mensagens')
+        .select('*')
+        .order('criado_em', { ascending: false })
+        .limit(5000);
+
+      if (!error && data) {
+        setConversas(data);
+      }
     };
 
     const buscarTemplates = async () => {
@@ -72,6 +91,16 @@ function App() {
     const intervalo = setInterval(buscarMensagens, 5000);
     return () => clearInterval(intervalo);
   }, []);
+
+  // Marca as mensagens do contato como lidas ao abrir a conversa
+  const abrirContato = (telefone: string) => {
+    setTelefoneAtivo(telefone);
+    setContatosVistos(prev => {
+      const novoEstado = { ...prev, [telefone]: Date.now() };
+      localStorage.setItem('finanser_vistos', JSON.stringify(novoEstado));
+      return novoEstado;
+    });
+  };
 
   const lidarComArquivo = (evento: ChangeEvent<HTMLInputElement>) => {
     const arquivo = evento.target.files?.[0];
@@ -108,8 +137,6 @@ function App() {
     const pacoteMensagens = dadosPlanilha.map((linha, index) => {
       const variaveisDinamicas = templateSelecionado.variaveis.map((varName: string) => {
         const colunaMapeada = mapeamento[varName];
-        
-        // ✨ CORREÇÃO DE SEGURANÇA: Retorna o objeto vazio se a coluna não for mapeada
         const nomeLimpo = varName.replace(/[{}]/g, '').trim();
         if (!colunaMapeada) return { name: nomeLimpo, text: '' };
 
@@ -166,7 +193,7 @@ function App() {
 
       if (resposta.ok) {
         setStatusDisparo(`🚀 SUCESSO! ${pacoteMensagens.length} mensagens disparadas!`);
-        const { data } = await supabase.from('mensagens').select('*').order('criado_em', { ascending: false });
+        const { data } = await supabase.from('mensagens').select('*').order('criado_em', { ascending: false }).limit(5000);
         if (data) setConversas(data);
       } else {
         setStatusDisparo('❌ Erro no envio.');
@@ -189,7 +216,7 @@ function App() {
 
         if (resposta.ok) {
           setMensagemDigitada(''); 
-          const { data } = await supabase.from('mensagens').select('*').order('criado_em', { ascending: false });
+          const { data } = await supabase.from('mensagens').select('*').order('criado_em', { ascending: false }).limit(5000);
           if (data) setConversas(data);
         } else {
           alert('❌ A Meta bloqueou o envio. O cliente interagiu nas últimas 24h?');
@@ -237,7 +264,7 @@ function App() {
         });
 
         if (resposta.ok) {
-          const { data } = await supabase.from('mensagens').select('*').order('criado_em', { ascending: false });
+          const { data } = await supabase.from('mensagens').select('*').order('criado_em', { ascending: false }).limit(5000);
           if (data) setConversas(data);
         } else {
           alert('❌ A Meta bloqueou o envio deste arquivo ou o formato não é suportado.');
@@ -257,12 +284,48 @@ function App() {
     }
   };
 
+  // Agrupa mensagens pelo número do cliente
   const contatosUnicos = conversas.reduce((acc, msg) => {
     if (!acc[msg.telefone_cliente]) acc[msg.telefone_cliente] = msg; 
     return acc;
   }, {});
   const listaContatos: any[] = Object.values(contatosUnicos);
-  
+
+  // Filtro de Busca (Lupa no topo)
+  const listaContatosFiltrados = listaContatos.filter((contato) => {
+    if (termoBusca.trim() === '') return true; 
+
+    const termo = termoBusca.toLowerCase();
+    if (contato.telefone_cliente.toLowerCase().includes(termo)) return true;
+
+    const msgsContato = conversas.filter(m => m.telefone_cliente === contato.telefone_cliente);
+    const temMensagemComTermo = msgsContato.some(m => 
+      m.texto_mensagem && m.texto_mensagem.toLowerCase().includes(termo)
+    );
+
+    return temMensagemComTermo;
+  });
+
+  // Calcula mensagens não lidas por contato
+  const calcularNaoLidas = (telefone: string) => {
+    if (telefoneAtivo === telefone) return 0;
+    const msgsContato = conversas.filter(m => m.telefone_cliente === telefone);
+    if (msgsContato.length === 0) return 0;
+
+    const vinteQuatroHorasAtras = Date.now() - (24 * 60 * 60 * 1000);
+    const ultimaVistasTime = contatosVistos[telefone] || vinteQuatroHorasAtras;
+    
+    const pendentes = msgsContato.filter(m => {
+      const timeMsg = new Date(m.criado_em).getTime();
+      return m.direcao === 'recebida' && timeMsg > ultimaVistasTime;
+    });
+    return pendentes.length;
+  };
+
+  const totalNaoRespondidas = listaContatos.reduce((total, c) => {
+    return total + (calcularNaoLidas(c.telefone_cliente) > 0 ? 1 : 0);
+  }, 0);
+
   const mensagensDoContato = conversas
     .filter(msg => msg.telefone_cliente === telefoneAtivo)
     .sort((a, b) => new Date(a.criado_em).getTime() - new Date(b.criado_em).getTime());
@@ -372,18 +435,24 @@ function App() {
   return (
     <div className="flex h-[100dvh] bg-gray-50 font-sans text-gray-800 overflow-hidden">
       
+      {/* 1. BARRA LATERAL ESQUERDA */}
       <div className={`bg-[#0b141a] flex-col items-center py-6 justify-between z-20 shadow-xl transition-all ${
         telefoneAtivo && abaAtiva === 'chat' ? 'hidden md:flex w-[70px]' : 'flex w-[70px]'
       }`}>
         <div className="flex flex-col gap-6 w-full px-3">
           <button 
             onClick={() => { setAbaAtiva('chat'); setTelefoneAtivo(null); }}
-            className={`w-full aspect-square rounded-xl flex items-center justify-center transition-all ${
+            className={`w-full aspect-square rounded-xl flex items-center justify-center transition-all relative ${
               abaAtiva === 'chat' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-400 hover:text-white hover:bg-white/10'
             }`}
             title="Atendimentos"
           >
             <MessageSquare size={24} />
+            {totalNaoRespondidas > 0 && (
+              <span className="absolute -top-1 -right-1 bg-green-500 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center border-2 border-[#0b141a]">
+                {totalNaoRespondidas}
+              </span>
+            )}
           </button>
           <button 
             onClick={() => { setAbaAtiva('disparo'); setTelefoneAtivo(null); }}
@@ -404,31 +473,70 @@ function App() {
         </button>
       </div>
 
+      {/* 2. PAINEL DE CONTATOS (COM BARRA DE BUSCA E NOTIFICAÇÕES) */}
       <div className={`bg-white border-r border-gray-200 flex-col z-10 shadow-sm ${
         abaAtiva === 'disparo' ? 'hidden md:flex md:w-[320px]' : (telefoneAtivo && abaAtiva === 'chat' ? 'hidden md:flex md:w-[320px]' : 'flex flex-1 md:w-[320px] md:flex-none')
       }`}>
         {abaAtiva === 'chat' ? (
           <>
-            <div className="h-16 border-b border-gray-100 flex items-center px-6">
+            <div className="h-16 border-b border-gray-100 flex items-center justify-between px-6 flex-shrink-0">
               <h2 className="font-bold text-lg text-[#111b21]">Atendimentos</h2>
+              {totalNaoRespondidas > 0 && (
+                <span className="text-xs bg-green-100 text-green-800 font-bold px-2.5 py-1 rounded-full">
+                  {totalNaoRespondidas} pendentes
+                </span>
+              )}
+            </div>
+
+            {/* BARRA DE PESQUISA */}
+            <div className="p-3 border-b border-gray-100 flex-shrink-0 bg-white">
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Search size={16} className="text-gray-400" />
+                </div>
+                <input
+                  type="text"
+                  placeholder="Buscar contato ou mensagem..."
+                  className="w-full pl-10 pr-4 py-2 bg-gray-100 border-transparent rounded-lg text-sm focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all outline-none"
+                  value={termoBusca}
+                  onChange={(e) => setTermoBusca(e.target.value)}
+                />
+              </div>
             </div>
             
             <div className="flex-1 overflow-y-auto">
-              <div className="px-6 py-2 bg-[#f0f2f5] text-[11px] font-bold text-gray-500 uppercase tracking-wider sticky top-0">
-                Contatos
+              <div className="px-6 py-2 bg-[#f0f2f5] text-[11px] font-bold text-gray-500 uppercase tracking-wider sticky top-0 z-10">
+                {termoBusca ? 'Resultados da Busca' : 'Contatos'}
               </div>
-              {listaContatos.map((contato, index) => (
-                <div key={index} onClick={() => setTelefoneAtivo(contato.telefone_cliente)}
-                  className={`p-4 border-b border-gray-50 cursor-pointer flex flex-col transition-colors ${
-                    telefoneAtivo === contato.telefone_cliente ? 'bg-[#f0f2f5]' : 'hover:bg-gray-50'
-                  }`}
-                >
-                  <h3 className="font-semibold text-gray-800 text-sm">{contato.telefone_cliente}</h3>
-                  <p className="text-xs text-gray-500 truncate mt-1">
-                    {formatarResumoSidebar(contato.texto_mensagem)}
-                  </p>
-                </div>
-              ))}
+
+              {listaContatosFiltrados.length === 0 ? (
+                <div className="p-6 text-center text-sm text-gray-500">Nenhum resultado encontrado.</div>
+              ) : (
+                listaContatosFiltrados.map((contato, index) => {
+                  const numNaoLidas = calcularNaoLidas(contato.telefone_cliente);
+                  return (
+                    <div key={index} onClick={() => abrirContato(contato.telefone_cliente)}
+                      className={`p-4 border-b border-gray-50 cursor-pointer flex items-center justify-between transition-colors ${
+                        telefoneAtivo === contato.telefone_cliente ? 'bg-[#f0f2f5]' : 'hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className="flex-1 min-w-0 pr-2">
+                        <h3 className="font-semibold text-gray-800 text-sm truncate">{contato.telefone_cliente}</h3>
+                        <p className="text-xs text-gray-500 truncate mt-1">
+                          {formatarResumoSidebar(contato.texto_mensagem)}
+                        </p>
+                      </div>
+
+                      {/* BOLINHA VERDE DE NOTIFICAÇÃO */}
+                      {numNaoLidas > 0 && (
+                        <span className="bg-green-500 text-white font-bold text-xs w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 animate-pulse">
+                          {numNaoLidas}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })
+              )}
             </div>
           </>
         ) : (
@@ -446,6 +554,7 @@ function App() {
         )}
       </div>
 
+      {/* 3. TELA DE CHAT PRINCIPAL */}
       <div className={`bg-gray-50 relative overflow-hidden flex-1 ${
         abaAtiva === 'chat' && !telefoneAtivo ? 'hidden md:flex flex-col' : 'flex flex-col'
       }`}>
@@ -507,8 +616,7 @@ function App() {
              )}
            </div>
         ) : (
-          <div className="flex-1 flex flex-col h-full relative">
-            <div className="absolute inset-0 z-0 bg-[url('/bg-chat.jpg')] bg-cover bg-center opacity-[0.15]"></div>
+          <div className="flex-1 flex flex-col h-full relative bg-[#efeae2]">
 
             {telefoneAtivo ? (
               <div className="flex-1 flex flex-col z-10 w-full h-full bg-white/40 backdrop-blur-sm">
@@ -607,7 +715,7 @@ function App() {
             ) : (
               <div className="flex-1 flex items-center justify-center z-10 w-full h-full bg-white/30 backdrop-blur-[2px]">
                 <div className="bg-white py-2 px-4 rounded-full shadow-sm text-sm text-gray-500 font-medium">
-                  Selecione um contato na barra lateral
+                  Selecione um contato na barra lateral para começar
                 </div>
               </div>
             )}
