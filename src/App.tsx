@@ -70,6 +70,19 @@ function App() {
     }
   };
 
+  // ✨ NOVO: Função que se comunica com o Motor para autorizar a leitura no Banco
+  const marcarComoLidoNoBanco = async (telefone: string) => {
+    try {
+      await fetch('https://motor-finanser-api.onrender.com/api/mark-read', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: telefone })
+      });
+    } catch (error) {
+      console.error("Erro ao enviar comando de leitura para o motor", error);
+    }
+  };
+
   useEffect(() => {
     const buscarMensagens = async () => {
       const { data, error } = await supabase
@@ -80,29 +93,23 @@ function App() {
 
       if (!error && data) {
         
-        // ✨ NOVO: Auto-leitura (Sincronização com o Banco de Dados)
-        // Se houver mensagens não lidas do cliente que já está com o chat aberto na nossa cara,
-        // nós avisamos ao Supabase que já lemos, para não notificar a equipe.
-        const naoLidasAtivas = data.filter(m =>
-          m.telefone_cliente === telefoneAtivo &&
-          m.direcao === 'recebida' &&
-          m.status !== 'read'
-        );
+        if (telefoneAtivo) {
+          const naoLidasAtivas = data.filter(m =>
+            m.telefone_cliente === telefoneAtivo &&
+            m.direcao === 'recebida' &&
+            m.status !== 'read'
+          );
 
-        if (naoLidasAtivas.length > 0) {
-          await supabase
-            .from('mensagens')
-            .update({ status: 'read' })
-            .eq('telefone_cliente', telefoneAtivo)
-            .eq('direcao', 'recebida')
-            .is('status', null);
-            
-          naoLidasAtivas.forEach(m => m.status = 'read'); // Atualiza na memória local
+          if (naoLidasAtivas.length > 0) {
+            // Se chegou mensagem enquanto eu olho pra tela, mando o motor apagar do banco
+            marcarComoLidoNoBanco(telefoneAtivo);
+            naoLidasAtivas.forEach(m => m.status = 'read'); 
+          }
         }
 
         setConversas(data);
 
-        const msgsRecebidas = data.filter(m => m.direcao === 'recebida');
+        const msgsRecebidas = data.filter(m => m.direcao === 'recebida' && m.status !== 'read');
         if (msgsRecebidas.length > 0) {
           const idMaisRecente = msgsRecebidas[0].id;
           if (ultimaMsgRef.current && ultimaMsgRef.current !== idMaisRecente) {
@@ -137,26 +144,20 @@ function App() {
     return () => clearInterval(intervalo);
   }, [telefoneAtivo]); 
 
-  // ✨ CORREÇÃO GLOBAL: Ao abrir a conversa, marca como "read" no Banco de Dados.
-  // Assim, se o Financeiro abrir a conversa, a bolinha apaga no computador da Diretoria também!
-  const abrirContato = async (telefone: string) => {
+  // ✨ CORREÇÃO: Usa o Motor para apagar a notificação de vez do Supabase
+  const abrirContato = (telefone: string) => {
     setTelefoneAtivo(telefone);
 
     const naoLidas = conversas.filter(m => m.telefone_cliente === telefone && m.direcao === 'recebida' && m.status !== 'read');
 
     if (naoLidas.length > 0) {
-      // 1. Apaga a notificação localmente na mesma hora (para ser instantâneo)
+      // 1. Apaga da tela imediatamente
       setConversas(prev => prev.map(m => 
         (m.telefone_cliente === telefone && m.direcao === 'recebida') ? { ...m, status: 'read' } : m
       ));
-
-      // 2. Avisa ao Supabase para apagar no computador dos outros usuários
-      await supabase
-        .from('mensagens')
-        .update({ status: 'read' })
-        .eq('telefone_cliente', telefone)
-        .eq('direcao', 'recebida')
-        .is('status', null);
+      
+      // 2. Aciona o Motor para salvar a leitura permanentemente
+      marcarComoLidoNoBanco(telefone);
     }
   };
 
@@ -362,7 +363,6 @@ function App() {
     return temMensagemComTermo;
   });
 
-  // ✨ CORREÇÃO 2: Agora lê diretamente do banco de dados (ignorando o navegador)
   const calcularNaoLidas = (telefone: string) => {
     if (telefoneAtivo === telefone) return 0;
     const msgsContato = conversas.filter(m => m.telefone_cliente === telefone);
