@@ -102,7 +102,9 @@ function App() {
         const res = await fetch(urlMotor);
         if (res.ok) {
           const templates = await res.json();
-          setTemplatesMeta([{ id: 'selecione', nome: '-- Escolha um Template --', variaveis: [] }, ...templates]);
+          // ✨ AQUI ESTÁ A CORREÇÃO: Variável criada antes de ser chamada
+          const templatesComDefault = [{ id: 'selecione', nome: '-- Escolha um Template --', variaveis: [] }, ...templates];
+          setTemplatesMeta(templatesComDefault);
           setTemplateSelecionado(templatesComDefault[0]);
         }
       } catch (error) {
