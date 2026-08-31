@@ -25,6 +25,12 @@ function App() {
   const [abaAtiva, setAbaAtiva] = useState<'disparo' | 'chat'>('chat');
   const [conversas, setConversas] = useState<any[]>([]);
   const [telefoneAtivo, setTelefoneAtivo] = useState<string | null>(null);
+  
+  // ✨ NOVO: Referência sempre atualizada do telefone ativo para os WebSockets
+  const telefoneAtivoRef = useRef<string | null>(null);
+  useEffect(() => {
+    telefoneAtivoRef.current = telefoneAtivo;
+  }, [telefoneAtivo]);
 
   const [colunasExcel, setColunasExcel] = useState<string[]>([]);
   const [dadosPlanilha, setDadosPlanilha] = useState<any[]>([]);
@@ -41,17 +47,9 @@ function App() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [enviandoMidia, setEnviandoMidia] = useState(false);
 
-  const ultimaMsgRef = useRef<string | null>(null);
-
   if (!autenticado) {
     return <Login onLogin={fazerLogin} />;
   }
-
-  useEffect(() => {
-    if (Notification.permission !== 'granted' && Notification.permission !== 'denied') {
-      Notification.requestPermission();
-    }
-  }, []);
 
   const dispararAlerta = (msg: any) => {
     try {
@@ -70,7 +68,6 @@ function App() {
     }
   };
 
-  // ✨ NOVO: Função que se comunica com o Motor para autorizar a leitura no Banco
   const marcarComoLidoNoBanco = async (telefone: string) => {
     try {
       await fetch('https://motor-finanser-api.onrender.com/api/mark-read', {
@@ -83,53 +80,29 @@ function App() {
     }
   };
 
+  // ✨ EFEITO PRINCIPAL: Carga Inicial e WebSockets (Substitui o setInterval)
   useEffect(() => {
-    const buscarMensagens = async () => {
-      const { data, error } = await supabase
+    if (Notification.permission !== 'granted' && Notification.permission !== 'denied') {
+      Notification.requestPermission();
+    }
+
+    const iniciarSistema = async () => {
+      // 1. Puxa o histórico UMA única vez
+      const { data } = await supabase
         .from('mensagens')
         .select('*')
         .order('criado_em', { ascending: false })
         .limit(5000);
 
-      if (!error && data) {
-        
-        if (telefoneAtivo) {
-          const naoLidasAtivas = data.filter(m =>
-            m.telefone_cliente === telefoneAtivo &&
-            m.direcao === 'recebida' &&
-            m.status !== 'read'
-          );
+      if (data) setConversas(data);
 
-          if (naoLidasAtivas.length > 0) {
-            // Se chegou mensagem enquanto eu olho pra tela, mando o motor apagar do banco
-            marcarComoLidoNoBanco(telefoneAtivo);
-            naoLidasAtivas.forEach(m => m.status = 'read'); 
-          }
-        }
-
-        setConversas(data);
-
-        const msgsRecebidas = data.filter(m => m.direcao === 'recebida' && m.status !== 'read');
-        if (msgsRecebidas.length > 0) {
-          const idMaisRecente = msgsRecebidas[0].id;
-          if (ultimaMsgRef.current && ultimaMsgRef.current !== idMaisRecente) {
-            if (msgsRecebidas[0].telefone_cliente !== telefoneAtivo) {
-              dispararAlerta(msgsRecebidas[0]);
-            }
-          }
-          ultimaMsgRef.current = idMaisRecente;
-        }
-      }
-    };
-
-    const buscarTemplates = async () => {
+      // 2. Busca templates
       try {
         const urlMotor = 'https://motor-finanser-api.onrender.com/api/templates';
         const res = await fetch(urlMotor);
         if (res.ok) {
           const templates = await res.json();
-          const templatesComDefault = [{ id: 'selecione', nome: '-- Escolha um Template --', variaveis: [] }, ...templates];
-          setTemplatesMeta(templatesComDefault);
+          setTemplatesMeta([{ id: 'selecione', nome: '-- Escolha um Template --', variaveis: [] }, ...templates]);
           setTemplateSelecionado(templatesComDefault[0]);
         }
       } catch (error) {
@@ -137,28 +110,57 @@ function App() {
       }
     };
 
-    buscarMensagens();
-    buscarTemplates();
+    iniciarSistema();
 
-    const intervalo = setInterval(buscarMensagens, 5000);
-    return () => clearInterval(intervalo);
-  }, [telefoneAtivo]); 
+    // ✨ A MÁGICA DO REALTIME: Fica ouvindo o banco silenciosamente
+    const canalRealtime = supabase
+      .channel('schema-db-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'mensagens' },
+        (payload) => {
+          // NOVA MENSAGEM INSERIDA (Recebida ou Enviada pelo Motor)
+          if (payload.eventType === 'INSERT') {
+            const novaMsg = payload.new;
+            setConversas((prev) => [novaMsg, ...prev]);
 
-  // ✨ CORREÇÃO: Usa o Motor para apagar a notificação de vez do Supabase
+            // Se for recebida e o chat não estiver aberto, toca o alerta!
+            if (novaMsg.direcao === 'recebida' && novaMsg.telefone_cliente !== telefoneAtivoRef.current) {
+              dispararAlerta(novaMsg);
+            }
+          } 
+          // MENSAGEM ATUALIZADA (Lido, Entregue, etc)
+          else if (payload.eventType === 'UPDATE') {
+            const msgAtualizada = payload.new;
+            setConversas((prev) => prev.map((m) => (m.id === msgAtualizada.id ? msgAtualizada : m)));
+          }
+        }
+      )
+      .subscribe();
+
+    // Limpeza ao fechar a aba
+    return () => {
+      supabase.removeChannel(canalRealtime);
+    };
+  }, []); 
+
+  // ✨ EFEITO AUTO-LEITURA: Se o chat aberto tiver mensagens não lidas, marca como lido
+  useEffect(() => {
+    if (telefoneAtivo) {
+      const naoLidas = conversas.filter(m => m.telefone_cliente === telefoneAtivo && m.direcao === 'recebida' && m.status !== 'read');
+      if (naoLidas.length > 0) {
+        marcarComoLidoNoBanco(telefoneAtivo);
+        // Atualiza na tela imediatamente
+        setConversas(prev => prev.map(m => 
+          (m.telefone_cliente === telefoneAtivo && m.direcao === 'recebida') ? { ...m, status: 'read' } : m
+        ));
+      }
+    }
+  }, [telefoneAtivo, conversas]);
+
   const abrirContato = (telefone: string) => {
     setTelefoneAtivo(telefone);
-
-    const naoLidas = conversas.filter(m => m.telefone_cliente === telefone && m.direcao === 'recebida' && m.status !== 'read');
-
-    if (naoLidas.length > 0) {
-      // 1. Apaga da tela imediatamente
-      setConversas(prev => prev.map(m => 
-        (m.telefone_cliente === telefone && m.direcao === 'recebida') ? { ...m, status: 'read' } : m
-      ));
-      
-      // 2. Aciona o Motor para salvar a leitura permanentemente
-      marcarComoLidoNoBanco(telefone);
-    }
+    // Apenas mudamos o estado do contato. O Efeito de Auto-Leitura (acima) faz o resto!
   };
 
   const lidarComArquivo = (evento: ChangeEvent<HTMLInputElement>) => {
@@ -252,8 +254,7 @@ function App() {
 
       if (resposta.ok) {
         setStatusDisparo(`🚀 SUCESSO! ${pacoteMensagens.length} mensagens disparadas!`);
-        const { data } = await supabase.from('mensagens').select('*').order('criado_em', { ascending: false }).limit(5000);
-        if (data) setConversas(data);
+        // Removida a necessidade de buscar no banco aqui! O WebSocket traz automaticamente as 500 mensagens.
       } else {
         setStatusDisparo('❌ Erro no envio.');
       }
@@ -275,8 +276,7 @@ function App() {
 
         if (resposta.ok) {
           setMensagemDigitada(''); 
-          const { data } = await supabase.from('mensagens').select('*').order('criado_em', { ascending: false }).limit(5000);
-          if (data) setConversas(data);
+          // Removida a necessidade de buscar no banco aqui! O WebSocket traz a bolha verde na hora.
         } else {
           alert('❌ A Meta bloqueou o envio. O cliente interagiu nas últimas 24h?');
         }
@@ -322,12 +322,10 @@ function App() {
           })
         });
 
-        if (resposta.ok) {
-          const { data } = await supabase.from('mensagens').select('*').order('criado_em', { ascending: false }).limit(5000);
-          if (data) setConversas(data);
-        } else {
+        if (!resposta.ok) {
           alert('❌ A Meta bloqueou o envio deste arquivo ou o formato não é suportado.');
         }
+        // O WebSocket trará a imagem instantaneamente
       } catch (err) {
         alert('❌ Erro de conexão com o Motor ao enviar arquivo.');
       } finally {
