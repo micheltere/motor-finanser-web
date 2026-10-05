@@ -15,6 +15,9 @@ import {
   Megaphone 
 } from 'lucide-react';
 
+// Endereço oficial centralizado do Motor Finanser no Render
+const URL_MOTOR = 'https://motor-finanser-api.onrender.com';
+
 // Mapa central que vincula cada Setor à sua Tabela Física e à Categoria de Template da Meta
 const CONFIG_SETORES: Record<string, {
   nome: string;
@@ -24,19 +27,13 @@ const CONFIG_SETORES: Record<string, {
   cobranca: {
     nome: 'Cobrança',
     tabelaMensagens: 'mensagens',
-    categoriaPadrao: 'UTILITY', // Só exibe modelos de Utilidade
+    categoriaPadrao: 'UTILITY', // Exibe modelos de Utilidade (parcelas, vencimentos, boletos)
   },
   vendas: {
     nome: 'Vendas',
     tabelaMensagens: 'mensagens_vendas',
-    categoriaPadrao: 'MARKETING', // Só exibe modelos de Marketing
+    categoriaPadrao: 'MARKETING', // Exibe modelos de Marketing (campanhas, formados, ofertas)
   },
-  // Caso venha a criar um setor para Autenticação/Outros no futuro, basta adicionar aqui:
-  // autenticacao: {
-  //   nome: 'Autenticação',
-  //   tabelaMensagens: 'mensagens_auth',
-  //   categoriaPadrao: 'AUTHENTICATION',
-  // }
 };
 
 function App() {
@@ -120,7 +117,7 @@ function App() {
 
   const marcarComoLidoNoBanco = async (telefone: string) => {
     try {
-      await fetch('https://motor-finanser-api.onrender.comm/api/mark-read', {
+      await fetch(`${URL_MOTOR}/api/mark-read`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone: telefone, setor: setorAtivo })
@@ -135,8 +132,7 @@ function App() {
     if (!autenticado) return;
     const buscarTemplates = async () => {
       try {
-        const urlMotor = 'https://motor-finanser-api.onrender.comm/api/templates';
-        const res = await fetch(urlMotor);
+        const res = await fetch(`${URL_MOTOR}/api/templates`);
         if (res.ok) {
           const templates = await res.json();
           const templatesComDefault = [{ id: 'selecione', nome: '-- Escolha um Template --', variaveis: [] }, ...templates];
@@ -201,7 +197,7 @@ function App() {
 
   const abrirContato = (telefone: string) => {
     setTelefoneAtivo(telefone);
-    setAbaAtiva('chat'); // Se estiver na tela de disparo, volta para a conversa na área de trabalho
+    setAbaAtiva('chat');
 
     const naoLidas = conversas.filter(m => m.telefone_cliente === telefone && m.direcao === 'recebida' && m.status !== 'read');
 
@@ -306,8 +302,7 @@ function App() {
     }).filter(msg => msg.phone !== '');
 
     try {
-      const urlMotor = 'https://motor-finanser-api.onrender.comm/api/send-bulk';
-      const resposta = await fetch(urlMotor, {
+      const resposta = await fetch(`${URL_MOTOR}/api/send-bulk`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages: pacoteMensagens, setor: setorAtivo })
@@ -336,8 +331,7 @@ function App() {
     );
 
     try {
-      const urlMotor = 'https://motor-finanser-api.onrender.comm/api/cancel-bulk';
-      const resposta = await fetch(urlMotor, {
+      const resposta = await fetch(`${URL_MOTOR}/api/cancel-bulk`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -364,8 +358,9 @@ function App() {
     if (!window.confirm('Tem certeza que deseja excluir esta mensagem do painel?')) return;
 
     try {
-      const urlMotor = `https://motor-finanser-api.onrender.comm/api/messages/${idMensagem}?setor=${setorAtivo}`;
-      const resposta = await fetch(urlMotor, { method: 'DELETE' });
+      const resposta = await fetch(`${URL_MOTOR}/api/messages/${idMensagem}?setor=${setorAtivo}`, {
+        method: 'DELETE'
+      });
 
       if (resposta.ok) {
         setConversas(prev => prev.filter(msg => msg.id !== idMensagem));
@@ -381,8 +376,9 @@ function App() {
     if (!window.confirm(`Tem certeza que deseja apagar TODO o histórico de mensagens do número ${telefone} no setor de ${CONFIG_SETORES[setorAtivo].nome}?`)) return;
 
     try {
-      const urlMotor = `https://motor-finanser-api.onrender.comm/api/conversations/${telefone}?setor=${setorAtivo}`;
-      const resposta = await fetch(urlMotor, { method: 'DELETE' });
+      const resposta = await fetch(`${URL_MOTOR}/api/conversations/${telefone}?setor=${setorAtivo}`, {
+        method: 'DELETE'
+      });
 
       if (resposta.ok) {
         setConversas(prev => prev.filter(msg => msg.telefone_cliente !== telefone));
@@ -399,8 +395,7 @@ function App() {
     if (mensagemDigitada.trim() !== '' && telefoneAtivo) {
       setEnviandoMensagem(true);
       try {
-        const urlMotor = 'https://motor-finanser-api.onrender.comm/api/send-message';
-        const resposta = await fetch(urlMotor, {
+        const resposta = await fetch(`${URL_MOTOR}/api/send-message`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ phone: telefoneAtivo, text: mensagemDigitada, setor: setorAtivo })
@@ -443,8 +438,7 @@ function App() {
       const base64 = leitor.result as string;
 
       try {
-        const urlMotor = 'https://motor-finanser-api.onrender.comm/api/send-media';
-        const resposta = await fetch(urlMotor, {
+        const resposta = await fetch(`${URL_MOTOR}/api/send-media`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -516,7 +510,6 @@ function App() {
   // Filtragem Automática de Templates por Categoria (UTILITY, MARKETING e Outras)
   const templatesFiltrados = templatesMeta.filter((tpl) => {
     if (tpl.id === 'selecione') return false;
-    // Se o backend antigo ainda não enviou a propriedade categoria, exibe todos para não travar
     if (!tpl.categoria) return true;
     return tpl.categoria.toUpperCase() === categoriaTemplateAtiva;
   });
@@ -550,7 +543,7 @@ function App() {
       const partes = texto.split('|');
       const mediaId = partes[1];
       const legenda = partes[2] && partes[2] !== ']' ? partes[2].replace(']', '') : '';
-      const urlMidia = `https://motor-finanser-api.onrender.comm/api/media/${mediaId}`;
+      const urlMidia = `${URL_MOTOR}/api/media/${mediaId}`;
 
       return (
         <div className="flex flex-col gap-2">
@@ -564,7 +557,7 @@ function App() {
       const partes = texto.split('|');
       const mediaId = partes[1];
       const nomeArquivo = partes[2] ? partes[2].replace(']', '') : 'Documento';
-      const urlDoc = `https://motor-finanser-api.onrender.comm/api/media/${mediaId}`;
+      const urlDoc = `${URL_MOTOR}/api/media/${mediaId}`;
 
       return (
         <a href={urlDoc} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 p-3 bg-white/60 border border-gray-200 rounded-lg text-blue-600 hover:text-blue-800 hover:bg-white transition-colors">
@@ -576,7 +569,7 @@ function App() {
 
     if (texto.startsWith('[AUDIO|')) {
       const mediaId = texto.replace('[AUDIO|', '').replace(']', '').trim();
-      const urlAudio = `https://motor-finanser-api.onrender.comm/api/media/${mediaId}`;
+      const urlAudio = `${URL_MOTOR}/api/media/${mediaId}`;
 
       return (
         <div className="flex items-center gap-2 min-w-[200px] md:min-w-[250px] py-1">
@@ -700,7 +693,6 @@ function App() {
       <div className={`bg-white border-r border-gray-200 flex-col z-10 shadow-sm ${
         abaAtiva === 'disparo' ? 'hidden md:flex md:w-[340px]' : (telefoneAtivo && abaAtiva === 'chat' ? 'hidden md:flex md:w-[340px]' : 'flex flex-1 md:w-[340px] md:flex-none')
       }`}>
-        {/* Topo da Barra do Chat com Título do Setor e Botão para abrir Página de Disparos */}
         <div className="p-4 border-b border-gray-100 flex flex-col gap-3 flex-shrink-0 bg-white">
           <div className="flex items-center justify-between">
             <h2 className="font-bold text-lg text-[#111b21]">
@@ -812,7 +804,6 @@ function App() {
                  </h1>
                </div>
 
-               {/* Botão Voltar no Celular */}
                <button
                  onClick={() => setAbaAtiva('chat')}
                  className="md:hidden px-3 py-2 bg-gray-200 rounded-lg text-xs font-bold text-gray-700"
@@ -871,7 +862,6 @@ function App() {
                        Categoria: {categoriaTemplateAtiva} ({templatesFiltrados.length})
                      </span>
 
-                     {/* Caso existam outras categorias na Meta (ex: AUTHENTICATION), exibe botão para alternar */}
                      {outrasCategorias.map((cat) => (
                        <button
                          key={cat}
