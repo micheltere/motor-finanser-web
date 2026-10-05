@@ -120,7 +120,7 @@ function App() {
 
   const marcarComoLidoNoBanco = async (telefone: string) => {
     try {
-      await fetch('https://motor-finandesk-xlj9.onrender.com/api/mark-read', {
+      await fetch('https://motor-finanser-api.onrender.comm/api/mark-read', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone: telefone, setor: setorAtivo })
@@ -135,7 +135,7 @@ function App() {
     if (!autenticado) return;
     const buscarTemplates = async () => {
       try {
-        const urlMotor = 'https://motor-finandesk-xlj9.onrender.com/api/templates';
+        const urlMotor = 'https://motor-finanser-api.onrender.comm/api/templates';
         const res = await fetch(urlMotor);
         if (res.ok) {
           const templates = await res.json();
@@ -306,7 +306,7 @@ function App() {
     }).filter(msg => msg.phone !== '');
 
     try {
-      const urlMotor = 'https://motor-finandesk-xlj9.onrender.com/api/send-bulk';
+      const urlMotor = 'https://motor-finanser-api.onrender.comm/api/send-bulk';
       const resposta = await fetch(urlMotor, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -336,7 +336,7 @@ function App() {
     );
 
     try {
-      const urlMotor = 'https://motor-finandesk-xlj9.onrender.com/api/cancel-bulk';
+      const urlMotor = 'https://motor-finanser-api.onrender.comm/api/cancel-bulk';
       const resposta = await fetch(urlMotor, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -364,7 +364,7 @@ function App() {
     if (!window.confirm('Tem certeza que deseja excluir esta mensagem do painel?')) return;
 
     try {
-      const urlMotor = `https://motor-finandesk-xlj9.onrender.com/api/messages/${idMensagem}?setor=${setorAtivo}`;
+      const urlMotor = `https://motor-finanser-api.onrender.comm/api/messages/${idMensagem}?setor=${setorAtivo}`;
       const resposta = await fetch(urlMotor, { method: 'DELETE' });
 
       if (resposta.ok) {
@@ -381,7 +381,7 @@ function App() {
     if (!window.confirm(`Tem certeza que deseja apagar TODO o histórico de mensagens do número ${telefone} no setor de ${CONFIG_SETORES[setorAtivo].nome}?`)) return;
 
     try {
-      const urlMotor = `https://motor-finandesk-xlj9.onrender.com/api/conversations/${telefone}?setor=${setorAtivo}`;
+      const urlMotor = `https://motor-finanser-api.onrender.comm/api/conversations/${telefone}?setor=${setorAtivo}`;
       const resposta = await fetch(urlMotor, { method: 'DELETE' });
 
       if (resposta.ok) {
@@ -399,7 +399,7 @@ function App() {
     if (mensagemDigitada.trim() !== '' && telefoneAtivo) {
       setEnviandoMensagem(true);
       try {
-        const urlMotor = 'https://motor-finandesk-xlj9.onrender.com/api/send-message';
+        const urlMotor = 'https://motor-finanser-api.onrender.comm/api/send-message';
         const resposta = await fetch(urlMotor, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -443,7 +443,7 @@ function App() {
       const base64 = leitor.result as string;
 
       try {
-        const urlMotor = 'https://motor-finandesk-xlj9.onrender.com/api/send-media';
+        const urlMotor = 'https://motor-finanser-api.onrender.comm/api/send-media';
         const resposta = await fetch(urlMotor, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -550,7 +550,7 @@ function App() {
       const partes = texto.split('|');
       const mediaId = partes[1];
       const legenda = partes[2] && partes[2] !== ']' ? partes[2].replace(']', '') : '';
-      const urlMidia = `https://motor-finandesk-xlj9.onrender.com/api/media/${mediaId}`;
+      const urlMidia = `https://motor-finanser-api.onrender.comm/api/media/${mediaId}`;
 
       return (
         <div className="flex flex-col gap-2">
@@ -564,7 +564,7 @@ function App() {
       const partes = texto.split('|');
       const mediaId = partes[1];
       const nomeArquivo = partes[2] ? partes[2].replace(']', '') : 'Documento';
-      const urlDoc = `https://motor-finandesk-xlj9.onrender.com/api/media/${mediaId}`;
+      const urlDoc = `https://motor-finanser-api.onrender.comm/api/media/${mediaId}`;
 
       return (
         <a href={urlDoc} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 p-3 bg-white/60 border border-gray-200 rounded-lg text-blue-600 hover:text-blue-800 hover:bg-white transition-colors">
@@ -576,7 +576,7 @@ function App() {
 
     if (texto.startsWith('[AUDIO|')) {
       const mediaId = texto.replace('[AUDIO|', '').replace(']', '').trim();
-      const urlAudio = `https://motor-finandesk-xlj9.onrender.com/api/media/${mediaId}`;
+      const urlAudio = `https://motor-finanser-api.onrender.comm/api/media/${mediaId}`;
 
       return (
         <div className="flex items-center gap-2 min-w-[200px] md:min-w-[250px] py-1">
